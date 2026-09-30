@@ -18,6 +18,7 @@ export default defineConfig({
         'verify-storage': 'scripts/verify-storage.ts',
         'verify-components': 'scripts/verify-components.tsx',
         'verify-hooks': 'scripts/verify-hooks.ts',
+      'verify-layout': 'scripts/verify-layout.tsx',
       },
       output: {
         entryFileNames: '[name].mjs',

@@ -38,21 +38,61 @@ const HASH_PREFIX = '#/';
 
 export const buildRouteHash = (route: RoutePath): string => `${HASH_PREFIX}${route}`;
 
+/** Splits a hash into its route segment and its query string. */
+export const splitRouteHash = (hash: string): { path: string; query: string } => {
+  const candidate = hash.startsWith(HASH_PREFIX) ? hash.slice(HASH_PREFIX.length) : hash;
+  const [path = '', ...rest] = candidate.replace(/^\/+|\/+$/g, '').split('?');
+  return { path, query: rest.join('?') };
+};
+
 /** Maps any hash to a known route, falling back to the dashboard. */
 export const parseRouteFromHash = (hash: string): RoutePath => {
-  const candidate = hash.startsWith(HASH_PREFIX) ? hash.slice(HASH_PREFIX.length) : hash;
-  const normalized = candidate.replace(/^\/+|\/+$/g, '').split('/')[0];
+  const { path } = splitRouteHash(hash);
+  const normalized = path.split('/')[0];
   return (ROUTE_PATHS as readonly string[]).includes(normalized)
     ? (normalized as RoutePath)
     : DEFAULT_ROUTE;
 };
 
+/**
+ * Parses a route query string into key/value pairs.
+ *
+ * A view can therefore be deep-linked (`#/inventory?status=low_stock`) and a
+ * cross-view link can carry a filter without any shared mutable state.
+ */
+export const parseRouteQuery = (query: string): Record<string, string> => {
+  const params: Record<string, string> = {};
+  for (const pair of query.split('&')) {
+    if (pair === '') continue;
+    const separator = pair.indexOf('=');
+    const key = separator === -1 ? pair : pair.slice(0, separator);
+    const value = separator === -1 ? '' : pair.slice(separator + 1);
+    if (key === '') continue;
+    params[decodeURIComponent(key)] = decodeURIComponent(value);
+  }
+  return params;
+};
+
+export const buildRouteHashWithQuery = (route: RoutePath, query?: Record<string, string>): string => {
+  if (query === undefined || Object.keys(query).length === 0) return buildRouteHash(route);
+  const search = Object.entries(query)
+    .filter(([, value]) => value !== undefined && value !== '')
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+    .join('&');
+  return search === '' ? buildRouteHash(route) : `${HASH_PREFIX}${route}?${search}`;
+};
+
 const readCurrentRoute = (): RoutePath =>
   typeof window === 'undefined' ? DEFAULT_ROUTE : parseRouteFromHash(window.location.hash);
 
+const readCurrentQuery = (): Record<string, string> =>
+  typeof window === 'undefined' ? {} : parseRouteQuery(splitRouteHash(window.location.hash).query);
+
 export interface RouterContextValue {
   currentRoute: RoutePath;
-  navigate: (route: RoutePath) => void;
+  /** Query parameters of the current hash, so views can be deep-linked. */
+  query: Record<string, string>;
+  navigate: (route: RoutePath, query?: Record<string, string>) => void;
 }
 
 const RouterContext = createContext<RouterContextValue | null>(null);
@@ -80,9 +120,13 @@ export interface RouterProps {
 
 export const Router: FC<RouterProps> = ({ renderView }) => {
   const [currentRoute, setCurrentRoute] = useState<RoutePath>(readCurrentRoute);
+  const [query, setQuery] = useState<Record<string, string>>(readCurrentQuery);
 
   useEffect(() => {
-    const handleHashChange = (): void => setCurrentRoute(readCurrentRoute());
+    const handleHashChange = (): void => {
+      setCurrentRoute(readCurrentRoute());
+      setQuery(readCurrentQuery());
+    };
     window.addEventListener('hashchange', handleHashChange);
 
     // Normalize an unknown or empty fragment so the address bar matches the
@@ -101,19 +145,18 @@ export const Router: FC<RouterProps> = ({ renderView }) => {
     document.title = `${ROUTE_TITLES[currentRoute]} · ${APP_TITLE}`;
   }, [currentRoute]);
 
-  const navigate = useCallback((route: RoutePath) => {
+  const navigate = useCallback((route: RoutePath, nextQuery?: Record<string, string>) => {
     setCurrentRoute((previous) => {
       if (previous === route) return previous;
-      if (readCurrentRoute() !== route) {
-        window.location.hash = buildRouteHash(route);
-      }
+      window.location.hash = buildRouteHashWithQuery(route, nextQuery);
       return route;
     });
+    if (nextQuery !== undefined) setQuery(nextQuery);
   }, []);
 
   const contextValue = useMemo<RouterContextValue>(
-    () => ({ currentRoute, navigate }),
-    [currentRoute, navigate],
+    () => ({ currentRoute, query, navigate }),
+    [currentRoute, query, navigate],
   );
 
   const content = renderView

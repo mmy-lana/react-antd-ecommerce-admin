@@ -7,7 +7,7 @@
  * scannable while staying a single linear reading order for screen readers.
  */
 
-import { ArrowRightOutlined } from '@ant-design/icons';
+import { ArrowRightOutlined, DownloadOutlined } from '@ant-design/icons';
 import { Button, Typography } from 'antd';
 import { useMemo, type FC, type ReactNode } from 'react';
 
@@ -18,6 +18,15 @@ import { StatusBadge } from '../../../shared/components/primitives/StatusBadge';
 import { formatCurrency } from '../../../shared/utils/currency';
 import { describeRelativeTime, formatUtc } from '../../../shared/utils/dateMath';
 import { isRevenueRecognizedOrder, type Order } from '../../../shared/types';
+
+/**
+ * Every control in the snapshot — the export button, "view all" and each order
+ * row — is a coarse pointer target, matching the rest of the shell.
+ */
+export const touchTargetStyle = {
+  minHeight: layoutTokens.touchTargetMinSize,
+  minWidth: layoutTokens.touchTargetMinSize,
+} as const;
 
 export const DEFAULT_RECENT_ORDER_COUNT = 6;
 
@@ -30,6 +39,8 @@ export interface RecentOrdersSnapshotProps {
   onOpenOrder?: (order: Order) => void;
   /** Navigates to the full sales view. */
   onViewAll?: () => void;
+  /** Writes the listed orders to a timestamped CSV. */
+  onExport?: () => void;
   emptyState?: ReactNode;
   /** Injected so relative times are stable under test. */
   now?: Date;
@@ -53,6 +64,7 @@ export const RecentOrdersSnapshot: FC<RecentOrdersSnapshotProps> = ({
   limit = DEFAULT_RECENT_ORDER_COUNT,
   onOpenOrder,
   onViewAll,
+  onExport,
   emptyState,
   now,
 }) => {
@@ -91,12 +103,31 @@ export const RecentOrdersSnapshot: FC<RecentOrdersSnapshotProps> = ({
         <Typography.Text style={{ color: colorTokens.textSecondary, fontSize: fontTokens.fontSizeSmall }}>
           {`${recent.length} most recent orders · ${formatCurrency(grossTotal)} combined`}
         </Typography.Text>
-        {onViewAll ? (
-          <Button type="link" size="small" onClick={onViewAll} style={{ paddingInline: 0 }}>
-            View all orders
-            <ArrowRightOutlined aria-hidden="true" />
-          </Button>
-        ) : null}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap' }}>
+          {onExport ? (
+            <Button
+              type="text"
+              size="small"
+              onClick={onExport}
+              icon={<DownloadOutlined aria-hidden="true" />}
+              aria-label={`Export ${recent.length} recent orders as CSV`}
+              style={{ ...touchTargetStyle, color: colorTokens.textSecondary }}
+            >
+              Export
+            </Button>
+          ) : null}
+          {onViewAll ? (
+            <Button
+              type="link"
+              size="small"
+              onClick={onViewAll}
+              style={{ ...touchTargetStyle, paddingInline: 0 }}
+            >
+              View all orders
+              <ArrowRightOutlined aria-hidden="true" />
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       {/* A plain list rather than a virtualized table: the snapshot is capped at

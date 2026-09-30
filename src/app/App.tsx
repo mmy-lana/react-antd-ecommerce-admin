@@ -1,16 +1,98 @@
-import { useCallback, useEffect, useState, type FC } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useState, type FC, type ReactNode } from 'react';
 import { App as AntdApp, Button, ConfigProvider, Result, Spin, Typography } from 'antd';
 
-import { Router } from './Router';
+import { Router, type RoutePath } from './Router';
 import { themeConfig } from './theme/themeConfig';
 import { databaseReady } from '../shared/db/dexieDb';
 import { seedDatabaseIfEmpty } from '../shared/db/seedData';
+import { useInventory } from '../features/inventory/hooks/useInventory';
+import { DashboardLayout } from '../shared/components/layout/DashboardLayout';
 
 type DatabasePhase = 'opening' | 'seeding' | 'ready' | 'failed';
+
+/**
+ * Screens are split per route.
+ *
+ * The dashboard alone pulls in `@ant-design/plots` and G2, which together are
+ * larger than the rest of the app; the two tables are smaller but still not part
+ * of the first paint. Loading each on navigation keeps the initial bundle to the
+ * shell and the shared component library.
+ */
+const DashboardView = lazy(async () => ({ default: (await import('../features/dashboard/views/DashboardView')).DashboardView }));
+const InventoryView = lazy(async () => ({ default: (await import('../features/inventory/views/InventoryView')).InventoryView }));
+const SalesView = lazy(async () => ({ default: (await import('../features/sales/views/SalesView')).SalesView }));
+
+/**
+ * The one place a route becomes a screen.
+ *
+ * Exported as a map rather than a `<Switch>` so the router stays unaware of the
+ * features and the verification suite can assert the mapping without mounting
+ * three database-backed views.
+ */
+export const ROUTE_VIEWS: Record<RoutePath, () => ReactNode> = {
+  dashboard: () => (
+    <Suspense fallback={<RouteFallback label="Loading the dashboard…" />}>
+      <DashboardView />
+    </Suspense>
+  ),
+  inventory: () => (
+    <Suspense fallback={<RouteFallback label="Loading inventory…" />}>
+      <InventoryView />
+    </Suspense>
+  ),
+  sales: () => (
+    <Suspense fallback={<RouteFallback label="Loading sales…" />}>
+      <SalesView />
+    </Suspense>
+  ),
+};
+
+/** The wrapped screen for a route: the dashboard shell around the feature view. */
+export const renderRouteView = (route: RoutePath): ReactNode => <WorkspaceLayout>{ROUTE_VIEWS[route]()}</WorkspaceLayout>;
 
 const BOOT_COPY: Record<Exclude<DatabasePhase, 'ready' | 'failed'>, string> = {
   opening: 'Opening the local workspace…',
   seeding: 'Preparing demo catalog and sales history…',
+};
+
+/**
+ * Placeholder for a screen whose chunk is still in flight.
+ *
+ * Announced rather than merely drawn, so a screen-reader user hears the swap
+ * instead of landing on silence.
+ */
+const RouteFallback: FC<{ label: string }> = ({ label }) => (
+  <div
+    role="status"
+    aria-live="polite"
+    style={{ display: 'flex', minHeight: 320, alignItems: 'center', justifyContent: 'center' }}
+  >
+    <Spin size="large" />
+    <Typography.Text style={{ marginInlineStart: 12 }}>{label}</Typography.Text>
+  </div>
+);
+
+/**
+ * The shell, plus the workspace counters the header badge shows.
+ *
+ * Kept separate from {@link AppShell} so the boot sequence has no live
+ * subscription: the badge's query only mounts once the database is ready.
+ */
+const WorkspaceLayout: FC<{ children: ReactNode }> = ({ children }) => {
+  const { analytics, totalCount } = useInventory();
+
+  const alerts = analytics.lowStockCount + analytics.outOfStockCount;
+
+  return (
+    <DashboardLayout
+      summary={{
+        products: totalCount,
+        alerts,
+      }}
+    >
+      {children}
+    </DashboardLayout>
+  );
 };
 
 /**
@@ -112,7 +194,7 @@ const AppShell: FC = () => {
     );
   }
 
-  return <Router />;
+  return <Router renderView={renderRouteView} />;
 };
 
 /**
