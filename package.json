@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.scripts.json",
+    "preview": "vite preview",
+    "verify:domain": "vite build --config scripts/vite.verify-domain.config.ts && node .verify-cache/verify-domain.mjs && node .verify-cache/verify-storage.mjs"
   },
   "dependencies": {
     "@ant-design/icons": "latest",
@@ -23,6 +25,7 @@
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "@vitejs/plugin-react": "latest",
+    "fake-indexeddb": "^6.2.5",
     "typescript": "latest",
     "vite": "latest"
   }
