@@ -46,6 +46,11 @@ export interface MetricCardProps {
   size?: 'default' | 'compact';
   /** Makes the card activatable; requires an accessible name. */
   onClick?: () => void;
+  /**
+   * Appended to the card's accessible name. Metric values are formatted for
+   * scanning, not for listening, so a spoken sentence belongs here.
+   */
+  ariaDescription?: string;
 }
 
 const ACCENT_COLOR: Record<MetricAccent, string> = {
@@ -71,6 +76,7 @@ export const MetricCard: FC<MetricCardProps> = ({
   loading = false,
   size = 'default',
   onClick,
+  ariaDescription,
 }) => {
   const compact = size === 'compact';
   const accentColor = ACCENT_COLOR[accent];
@@ -111,6 +117,9 @@ export const MetricCard: FC<MetricCardProps> = ({
   };
 
   const hasTrend = trend !== undefined && Number.isFinite(trend);
+
+  const baseName = onClick ? `${title} — open details` : title;
+  const accessibleName = ariaDescription ? `${baseName}. ${ariaDescription}` : baseName;
 
   const cardContent = (
     <>
@@ -232,7 +241,7 @@ export const MetricCard: FC<MetricCardProps> = ({
       styles={{ body: { padding: 0 } }}
       role={onClick ? 'button' : 'group'}
       tabIndex={onClick ? 0 : undefined}
-      aria-label={onClick ? `${title} — open details` : title}
+      aria-label={accessibleName}
       aria-busy={loading || undefined}
       onClick={onClick}
       onKeyDown={

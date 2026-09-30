@@ -53,13 +53,20 @@ const getCurrencyFormatter = (options: Required<CurrencyFormatOptions>): Intl.Nu
 const resolveCurrencyOptions = (options: CurrencyFormatOptions = {}): Required<CurrencyFormatOptions> => {
   const notation = options.notation ?? 'standard';
   const compact = notation === 'compact';
+  const maximumFractionDigits = options.maximumFractionDigits ?? (compact ? 1 : 2);
+  // `Intl.NumberFormat` throws when the maximum sits below the minimum, so a
+  // caller asking for whole dollars must not inherit the default minimum of 2.
+  const minimumFractionDigits = Math.min(
+    options.minimumFractionDigits ?? (compact ? 0 : 2),
+    maximumFractionDigits,
+  );
   return {
     currency: options.currency ?? DEFAULT_CURRENCY,
     locale: options.locale ?? DEFAULT_LOCALE,
     display: options.display ?? 'symbol',
     notation,
-    minimumFractionDigits: options.minimumFractionDigits ?? (compact ? 0 : 2),
-    maximumFractionDigits: options.maximumFractionDigits ?? (compact ? 1 : 2),
+    minimumFractionDigits,
+    maximumFractionDigits,
   };
 };
 
