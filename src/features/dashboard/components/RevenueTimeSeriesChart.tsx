@@ -215,7 +215,6 @@ export const buildRevenueChartConfig = ({
 export interface RevenueTimeSeriesChartProps {
   data: readonly SalesTimeSeriesPoint[];
   interval: AggregationInterval;
-  onIntervalChange?: (interval: AggregationInterval) => void;
   /** Defaults to `revenue`. */
   series?: RevenueSeriesKey;
   onSeriesChange?: (series: RevenueSeriesKey) => void;
@@ -228,17 +227,21 @@ export interface RevenueTimeSeriesChartProps {
   chartRenderer?: (config: AreaConfig) => ReactNode;
 }
 
-const INTERVAL_OPTIONS: { label: string; value: AggregationInterval }[] = [
-  { label: 'Daily', value: 'day' },
-  { label: 'Monthly', value: 'month' },
-];
-
+/**
+ * The aggregation interval is deliberately not a control on this chart.
+ *
+ * `DashboardView` renders Daily/Weekly/Monthly in the card header, and the
+ * chart used to carry a second Daily/Monthly `Segmented` of its own. Because
+ * `DashboardView` never passed an `onIntervalChange` down, that inner control
+ * was inert — it looked switchable and did nothing — and it disagreed with the
+ * header control, which also offers Weekly. The interval is the parent card's
+ * affordance, so the chart is a pure function of it.
+ */
 const SERIES_OPTIONS = REVENUE_SERIES.map((entry) => ({ label: entry.label, value: entry.key }));
 
 export const RevenueTimeSeriesChart: FC<RevenueTimeSeriesChartProps> = ({
   data,
   interval,
-  onIntervalChange,
   series = 'revenue',
   onSeriesChange,
   loading = false,
@@ -343,13 +346,6 @@ export const RevenueTimeSeriesChart: FC<RevenueTimeSeriesChartProps> = ({
             value={series}
             options={SERIES_OPTIONS}
             onChange={(value) => onSeriesChange?.(value as RevenueSeriesKey)}
-          />
-          <Segmented
-            size="small"
-            aria-label="Aggregation interval"
-            value={interval}
-            options={INTERVAL_OPTIONS}
-            onChange={(value) => onIntervalChange?.(value as AggregationInterval)}
           />
         </Space>
 

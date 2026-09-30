@@ -410,7 +410,10 @@ export const InventoryTable: FC<InventoryTableProps> = ({
         title: 'Updated',
         dataIndex: 'updatedAt',
         key: 'updatedAt',
-        width: 156,
+        // Fits "UPDATED" plus the sorter arrows plus the cell padding. At 156
+        // the label ellipsised to "Updat…", which hid both the column's meaning
+        // and the fact that it is sortable.
+        width: 172,
         sorter: (a: Product, b: Product) => a.updatedAt.localeCompare(b.updatedAt),
         render: (updatedAt: string) => (
           <Typography.Text style={{ color: colorTokens.textTertiary, fontSize: fontTokens.fontSizeSmall }}>

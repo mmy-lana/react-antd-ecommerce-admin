@@ -171,9 +171,124 @@ const assertDashboardMounted = async (page: Page): Promise<void> => {
     ).length,
   );
   check('the charts have non-zero dimensions', painted >= 2, `${painted} of ${charts} canvases were sized`);
+
+  /* ---- UI-CSS-01: status badges must not stretch into vertical sausages ---- */
+  {
+    const badges = await page.locator('.status-badge').all();
+    const boxes = await Promise.all(badges.map((badge) => badge.boundingBox()));
+    const heights = boxes.map((box) => box?.height ?? Number.NaN);
+    const tallest = heights.length === 0 ? Number.NaN : Math.max(...heights);
+    check(
+      'status badges render compact, never stretched (UI-CSS-01)',
+      badges.length > 0 && heights.every((height) => height <= 30),
+      `${badges.length} badges, tallest ${tallest}px, heights ${JSON.stringify(heights.slice(0, 8))}`,
+    );
+    check(
+      'status badges are at least 20px tall so they stay legible pills',
+      heights.every((height) => height >= 20),
+      JSON.stringify(heights.slice(0, 8)),
+    );
+  }
+
+  /* ---- UI-LAYOUT-01: the donut legend must not clip ---- */
+  {
+    const legend = page.locator('ul[aria-label*="Revenue by category"]');
+    check('the donut legend is present', (await legend.count()) === 1, `count ${await legend.count()}`);
+
+    // The legend is below the donut, and the donut is centred in the column.
+    const stacking = await page.evaluate(() => {
+      const root = document.querySelector('ul[aria-label*="Revenue by category"]')?.parentElement;
+      if (!root) return null;
+      return { direction: getComputedStyle(root).flexDirection, width: root.getBoundingClientRect().width };
+    });
+    check(
+      'the donut and its legend are stacked, not side by side (UI-LAYOUT-01)',
+      stacking !== null && stacking.direction === 'column',
+      JSON.stringify(stacking),
+    );
+
+    // Every name and value must be inside its own row's box, with no
+    // horizontal clipping or ellipsis.
+    const clipped = await page.evaluate(() => {
+      const rows = Array.from(document.querySelectorAll('ul[aria-label*="Revenue by category"] > li > button'));
+      return rows
+        .map((row) => {
+          const rowBox = row.getBoundingClientRect();
+          const parts = Array.from(row.children).filter(
+            (child) => !(child.classList.contains('visually-hidden')) && getComputedStyle(child).position !== 'absolute',
+          );
+          const name = parts[0] as HTMLElement | undefined;
+          const overflows = parts
+            .filter((part) => part.getBoundingClientRect().right > rowBox.right + 0.5)
+            .map((part) => (part.textContent ?? '').slice(0, 24));
+          const ellipsised = name !== undefined && name.scrollWidth > name.clientWidth + 1;
+          return { text: (name?.textContent ?? '').slice(0, 32), overflows, ellipsised };
+        })
+        .filter((entry) => entry.overflows.length > 0 || entry.ellipsised);
+    });
+    check(
+      'every donut legend row shows its name and values without clipping (UI-LAYOUT-01)',
+      clipped.length === 0,
+      JSON.stringify(clipped.slice(0, 4)),
+    );
+
+    const centreCaption = await page.getByText('Product Sales', { exact: true }).count();
+    check('the donut centre is captioned as product sales (FIN-DATA-01)', centreCaption === 1, `count ${centreCaption}`);
+    const staleCaption = await page.getByText('Total revenue', { exact: true }).count();
+    check('the misleading "Total revenue" centre caption is gone (FIN-DATA-01)', staleCaption === 0, `count ${staleCaption}`);
+  }
+
+  /* ---- UX-METRIC-01 / UX-DASH-01: no duplicated percentage or interval ---- */
+  {
+    // The growth percentage must appear exactly once inside the growth card.
+    // Counting "vs " text across the whole grid is wrong: Total Revenue
+    // legitimately carries a trend badge with its own comparison label.
+    const growth = await page.evaluate(() => {
+      const value = document.querySelector('[data-testid="metric-value-Revenue Growth"]');
+      const card = value?.closest('.metric-card') ?? null;
+      if (!card || !value) return null;
+      const rendered = (value.textContent ?? '').trim();
+      const occurrences = (card.textContent ?? '').split(rendered).length - 1;
+      return { rendered, occurrences, cardText: (card.textContent ?? '').replace(/\s+/g, ' ').trim() };
+    });
+    check(
+      'the growth percentage is printed exactly once on its card (UX-METRIC-01)',
+      growth !== null && growth.occurrences === 1,
+      JSON.stringify(growth),
+    );
+    check(
+      'the growth card keeps its comparison hint (UX-METRIC-01)',
+      growth !== null && /vs /.test(growth.cardText),
+      JSON.stringify(growth?.cardText),
+    );
+
+    // Total Revenue is the card that has nowhere else to put the trend.
+    const revenueCard = await page.evaluate(() => {
+      const value = document.querySelector('[data-testid="metric-value-Total Revenue"]');
+      const card = value?.closest('.metric-card') ?? null;
+      return card ? (card.textContent ?? '').replace(/\s+/g, ' ').trim() : null;
+    });
+    check(
+      'total revenue still carries the growth trend (UX-METRIC-01)',
+      revenueCard !== null && /vs /.test(revenueCard),
+      JSON.stringify(revenueCard),
+    );
+  }
+  {
+    const internalIntervals = await page.locator('div[aria-label="Aggregation interval"]').count();
+    check(
+      'the interval control appears exactly once, in the card header (UX-DASH-01)',
+      internalIntervals === 1,
+      `found ${internalIntervals}`,
+    );
+    const weekly = await page.locator('div[aria-label="Aggregation interval"] button', { hasText: 'Weekly' }).count();
+    check('the surviving interval control offers Weekly', weekly === 1, `count ${weekly}`);
+    const metrics = await page.locator('.ant-segmented[aria-label="Time series metric"]').count();
+    check('the series control survives in the chart (UX-DASH-01)', metrics === 1, `count ${metrics}`);
+  }
 };
 
-const assertInventoryLoaded = async (page: Page): Promise<void> => {
+const assertInventoryLoaded = async (page: Page, viewportWidth: number): Promise<void> => {
   const rows = page.locator('div.ant-table-row');
   // The virtual body measures its window after mount, so a freshly navigated
   // route legitimately has no rows for a frame.
@@ -207,6 +322,63 @@ const assertInventoryLoaded = async (page: Page): Promise<void> => {
     (value, index) => index === 0 || value.localeCompare(sorted[index - 1], undefined, { numeric: true }) >= 0,
   );
   check('the inventory table is sorted by name', isAlphabetical, `got ${JSON.stringify(sorted.slice(0, 5))}`);
+
+  /* ---- UI-TABLE-01: the "Updated" header must not be truncated ---- */
+  // The column is desktop-only by design (`resolveColumnDensity` folds it into
+  // the expandable row below 768px), so asserting it at phone widths would be
+  // asserting that a deliberately hidden column exists.
+  const hasUpdatedHeader = async (): Promise<boolean> =>
+    page.evaluate(() =>
+      Array.from(document.querySelectorAll('.ant-table-thead th')).some(
+        (th) =>
+          (th.querySelector('.ant-table-column-title')?.textContent ?? '').trim().toLowerCase() === 'updated',
+      ),
+    );
+
+  if (viewportWidth < 768) {
+    check(
+      'the "Updated" column is folded away on narrow viewports (UI-TABLE-01)',
+      (await hasUpdatedHeader()) === false,
+    );
+  } else {
+    const updated = await page.evaluate(() => {
+      const header = Array.from(document.querySelectorAll('.ant-table-thead th')).find((th) =>
+        (th.querySelector('.ant-table-column-title')?.textContent ?? '').trim().toLowerCase() === 'updated',
+      );
+      if (!header) return null;
+      // Compare the label's own box against the header cell's, so an ellipsis
+      // or a clipped overflow is detected even though the DOM text is intact.
+      const cell = header.getBoundingClientRect();
+      const label = Array.from(header.querySelectorAll('span, .ant-table-column-sorters'))
+        .map((node) => node.getBoundingClientRect())
+        .reduce<DOMRect | null>((widest, rect) => (widest === null || rect.width > widest.width ? rect : widest), null);
+      return {
+        text: (header.querySelector('.ant-table-column-title')?.textContent ?? '').trim(),
+        clipped: label !== null && label.right > cell.right + 0.5,
+        ellipsised:
+          (header.querySelector('.ant-table-column-title') as HTMLElement | null) !== null &&
+          ((header.querySelector('.ant-table-column-title') as HTMLElement).scrollWidth >
+            (header.querySelector('.ant-table-column-title') as HTMLElement).clientWidth + 1 ||
+            header.scrollWidth > header.clientWidth + 1),
+        width: Math.round(cell.width),
+      };
+    });
+    check(
+      'the inventory table shows the full "Updated" column header (UI-TABLE-01)',
+      updated !== null && updated.text === 'Updated',
+      `header ${JSON.stringify(updated)}`,
+    );
+    check(
+      'the "Updated" header is not clipped or ellipsised (UI-TABLE-01)',
+      updated !== null && !updated.clipped && !updated.ellipsised,
+      `header ${JSON.stringify(updated)}`,
+    );
+    check(
+      'the "Updated" column is wide enough for its label and sorter (UI-TABLE-01)',
+      updated !== null && updated.width >= 172,
+      `rendered ${updated?.width}px`,
+    );
+  }
 };
 
 const assertSalesLoaded = async (page: Page, viewportWidth: number): Promise<void> => {
@@ -303,7 +475,7 @@ const main = async (): Promise<number> => {
     const baseUrl = server.resolvedUrls?.local[0]?.replace(/\/$/, '') ?? 'http://127.0.0.1:4173';
     console.log(`Serving the production build at ${baseUrl}`);
 
-    browser = await chromium.launch();
+    browser = await chromium.launch({ headless: true });
     // One context for the whole run: IndexedDB persists inside a context, so
     // the 30-product / 100-order seed happens once on the cold start rather
     // than before every viewport.
@@ -340,7 +512,7 @@ const main = async (): Promise<number> => {
       await waitForNavigationBand(page, viewport.width);
       await assertNavigationMatchesBand(page, viewport.width);
       await assertNoHorizontalOverflow(page, viewport.width);
-      await assertInventoryLoaded(page);
+      await assertInventoryLoaded(page, viewport.width);
 
       await goto(page, baseUrl, 'sales');
       await waitForNavigationBand(page, viewport.width);

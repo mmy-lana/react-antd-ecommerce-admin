@@ -568,6 +568,17 @@ export const ProductFormDrawer: FC<ProductFormDrawerProps> = ({
     <Drawer
       open={open}
       onClose={onClose}
+      /**
+       * `size`, not `width`.
+       *
+       * Ant Design 6 declares `size?: 'default' | 'large' | number | string` —
+       * a dynamic pixel or `'100%'` value is a supported input, and `size` is
+       * the *replacement* API. `width` is not merely stylistic here: `Drawer.js`
+       * runs `warning.deprecated(!(deprecatedName in props), 'width', 'size')`
+       * on every render, so passing it logs
+       * `[antd: Drawer] 'width' is deprecated` to the console. The v5-era rule
+       * that `size` only accepts two literals no longer applies.
+       */
       size={width}
       title={isEditing ? `Edit ${product.name}` : 'New product'}
       aria-label={isEditing ? `Edit product ${product.name}` : 'Create a new product'}

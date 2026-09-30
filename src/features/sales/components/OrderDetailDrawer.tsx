@@ -1,9 +1,10 @@
 /**
  * Order detail drawer (plan Task 3.6).
  *
- * Width follows the plan's overlay contract exactly:
- * `width={viewportWidth < 480 ? '100%' : 460}` — below 480px a drawer that is
- * 460px wide would itself be a horizontal scroll source.
+ * Width follows the plan's overlay contract exactly: full width below 480px,
+ * 460px above it — below 480px a drawer that is 460px wide would itself be a
+ * horizontal scroll source. The value reaches the panel through the `size` prop,
+ * which is Ant Design 6's replacement for the deprecated `width`.
  *
  * Line items, customer facts, the fulfilment cost profile and a lifecycle
  * timeline are shown together so a support agent can answer "what happened to
@@ -342,6 +343,13 @@ export const OrderDetailDrawer: FC<OrderDetailDrawerProps> = ({
     <Drawer
       open={open}
       onClose={onClose}
+      /**
+       * `size`, not `width` — see the note in `ProductFormDrawer`.
+       *
+       * `size` accepts `number | string` in Ant Design 6, so the responsive
+       * `'100%'` / fixed-pixel value is valid. `width` is the deprecated prop
+       * and logs a console warning on every render.
+       */
       size={width ?? computedWidth}
       title={drawerTitle}
       aria-label={order ? `Order ${order.orderNumber} details` : 'Order details'}

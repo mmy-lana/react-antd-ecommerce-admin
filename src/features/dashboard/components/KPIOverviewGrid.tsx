@@ -81,7 +81,10 @@ export const buildKpiCards = (
       value: hasPreviousPeriod ? formatSignedPercent(growth) : '—',
       icon: <LineChartOutlined />,
       accent: hasPreviousPeriod ? (growth >= 0 ? 'success' : 'danger') : 'neutral',
-      ...(hasPreviousPeriod ? { trend: growth, positiveIsGood: true } : {}),
+      // No `trend` here on purpose. The card's own value *is* the growth
+      // percentage, so a trend badge would print the identical number a second
+      // time directly underneath it. `Total Revenue` carries the trend, which
+      // is the card that has no other place to put it.
       hint: hasPreviousPeriod ? comparisonLabel : 'No earlier period to compare',
       ariaDescription: hasPreviousPeriod
         ? `Revenue ${growth >= 0 ? 'grew' : 'fell'} ${formatPercent(Math.abs(growth))} against the previous period.`

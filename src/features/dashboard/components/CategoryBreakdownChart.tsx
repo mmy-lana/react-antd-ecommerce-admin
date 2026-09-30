@@ -110,21 +110,6 @@ export const buildCategoryDonutConfig = ({
   width,
   height,
   autoFit: false,
-
-  // Enter/update/exit animation is disabled deliberately.
-  //
-  // `@ant-design/plots` 2.x drives the Web Animations API directly, and its path
-  // interpolation (`getRotatedCurve` → `CSSPropertyPath.mergePaths`) walks a
-  // segment index that can run past the end of the first path whenever a shape is
-  // not measurable at animation time. That dereference throws an *uncaught*
-  // `TypeError` from inside a `new KeyframeEffect(...)` constructor, so no React
-  // error boundary can catch it: it escapes as a page-level exception on every
-  // dashboard render.
-  //
-  // These charts redraw on every filter change and hold no state worth
-  // animating, so a still chart is a better trade than a guaranteed exception.
-  // It also matches the project's existing `prefers-reduced-motion` policy.
-  animate: { enter: false, update: false, exit: false },
   scale: {
     color: { range: slices.map((slice) => slice.color) },
   },
@@ -164,6 +149,15 @@ export const CategoryBreakdownChart: FC<CategoryBreakdownChartProps> = ({
   const [hoveredCategory, setHoveredCategory] = useState<string | null>(null);
 
   const slices = useMemo(() => buildCategorySlices(data), [data]);
+  /**
+   * Line-item gross subtotal, not settled order revenue.
+   *
+   * `buildRevenueByCategory` sums each order line's `subtotal` and never adds
+   * order-level discount, tax, or shipping, so this figure is deliberately
+   * larger than the "Total Revenue" KPI. The centre caption says
+   * "Product Sales" for exactly this reason — the two numbers are not
+   * reconcilable against each other and must not claim to be.
+   */
   const totalRevenue = useMemo(
     () => slices.reduce((sum, slice) => sum + slice.revenue, 0),
     [slices],
@@ -206,16 +200,28 @@ export const CategoryBreakdownChart: FC<CategoryBreakdownChartProps> = ({
 
   return (
     <div
-      style={{
-        display: 'flex',
-        flexDirection: compact ? 'column' : 'row',
-        alignItems: 'center',
-        gap: layoutTokens.contentPadding,
-        minWidth: 0,
-      }}
-    >
+      // Always stacked, never a row. The chart lives in an `xl={8}` column —
+    // roughly a third of a 1440px viewport — and a side-by-side donut and
+    // legend left the legend ~200px, which ellipsised every category name and
+    // pushed the revenue and percentage columns out of view. Stacking gives the
+    // legend the full column width, so all three fields read in full.
+    style={{
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'stretch',
+      gap: layoutTokens.contentPadding,
+      minWidth: 0,
+    }}
+  >
       <div
-        style={{ position: 'relative', flexShrink: 0, width: resolvedWidth, height: resolvedHeight }}
+        style={{
+          position: 'relative',
+          flexShrink: 0,
+          // Centred within the column rather than pinned to its start edge.
+          marginInline: 'auto',
+          width: resolvedWidth,
+          height: resolvedHeight,
+        }}
         role="img"
         aria-label={`Donut chart of revenue by category. ${slices
           .map((slice) => `${slice.category} ${formatPercent(slice.percentage)}`)
@@ -252,7 +258,7 @@ export const CategoryBreakdownChart: FC<CategoryBreakdownChartProps> = ({
             {formatCurrency(totalRevenue, { maximumFractionDigits: 0 })}
           </span>
           <span style={{ fontSize: fontTokens.fontSizeTiny, color: colorTokens.textTertiary }}>
-            Total revenue
+            Product Sales
           </span>
         </div>
       </div>
@@ -316,8 +322,13 @@ export const CategoryBreakdownChart: FC<CategoryBreakdownChartProps> = ({
                   }}
                 />
                 <span
+                  title={slice.category}
                   style={{
-                    flex: 1,
+                    // The name takes the slack; the two numeric columns are
+                    // `flexShrink: 0` so a long category name can never squeeze
+                    // the currency or the percentage out of the row. Ellipsis
+                    // is kept only as a last resort for a pathological name.
+                    flex: '1 1 auto',
                     minWidth: 0,
                     color: colorTokens.textPrimary,
                     fontSize: fontTokens.fontSizeSmall,
@@ -330,6 +341,7 @@ export const CategoryBreakdownChart: FC<CategoryBreakdownChartProps> = ({
                 </span>
                 <span
                   style={{
+                    flexShrink: 0,
                     color: colorTokens.textSecondary,
                     fontSize: fontTokens.fontSizeSmall,
                     fontVariantNumeric: 'tabular-nums',
@@ -339,6 +351,7 @@ export const CategoryBreakdownChart: FC<CategoryBreakdownChartProps> = ({
                 </span>
                 <Typography.Text
                   style={{
+                    flexShrink: 0,
                     color: colorTokens.textTertiary,
                     fontSize: fontTokens.fontSizeTiny,
                     fontVariantNumeric: 'tabular-nums',

@@ -169,6 +169,29 @@ check(
 );
 check('status dot is decorative', stockBadge.includes('aria-hidden="true"'));
 
+// UI-CSS-01: the pill must declare its own height and opt out of flex
+// stretching, or a table row turns it into a tall vertical sausage.
+check('the badge declares an explicit height', /height:\s*26px/.test(stockBadge), stockBadge.slice(0, 400));
+check('the badge caps its own height', /max-height:\s*26px/.test(stockBadge));
+check('the badge opts out of flex stretching', /align-self:\s*center/.test(stockBadge));
+check('the badge uses border-box so the border stays inside', /box-sizing:\s*border-box/.test(stockBadge));
+check('the badge centres its own content', /justify-content:\s*center/.test(stockBadge));
+check('the badge is a flex container', /display:\s*inline-flex/.test(stockBadge));
+
+const smallBadge = render('StatusBadge small', <StatusBadge domain="stock" status="low_stock" size="small" />);
+check('the small badge is shorter than the default', /height:\s*22px/.test(smallBadge), smallBadge.slice(0, 400));
+check('the small badge is capped at 22px', /max-height:\s*22px/.test(smallBadge));
+
+// An interactive badge is a 44px touch target, so it must not inherit the
+// read-only cap — a `max-height` smaller than `min-height` silently loses.
+const touchBadge = render(
+  'StatusBadge interactive',
+  <StatusBadge domain="order" status="pending" onClick={() => undefined} />,
+);
+check('the interactive badge keeps its touch target', /min-height:\s*(44|36)px/.test(touchBadge), touchBadge.slice(0, 400));
+check('the interactive badge is not height-capped', !/max-height:\s*2\dpx/.test(touchBadge), touchBadge.slice(0, 400));
+check('the interactive badge still opts out of stretching', /align-self:\s*center/.test(touchBadge));
+
 const orderBadge = render(
   'StatusBadge order',
   <StatusBadge domain="order" status="refunded" />,
@@ -530,6 +553,14 @@ check('kpi keys are the expected set', kpiCards.map((card) => card.key).join(','
   'totalRevenue,revenueGrowthPct,grossProfit,profitMarginPct,averageOrderValue,stockAlerts');
 check('revenue card carries the growth trend', kpiCards[0].trend === 12.5);
 check('growth card is signed', kpiCards[1].value.startsWith('+'));
+// UX-METRIC-01: the card's own value is already the growth percentage, so a
+// `trend` would print the identical number a second time underneath it.
+check('growth card does not repeat its own percentage as a trend', kpiCards[1].trend === undefined);
+check('growth card keeps its comparison hint', kpiCards[1].hint === 'vs previous period');
+check(
+  'no other card claims a percentage identical to its own value',
+  kpiCards.every((card) => card.trend === undefined || !card.value.includes(String(card.trend))),
+);
 check('profit card shows the margin', kpiCards[2].secondaryLabel?.includes('25') === true);
 check('stock alert card counts both buckets', kpiCards[5].value === '6');
 check('stock alert card is navigable', kpiCards[5].interactive === true);
@@ -538,6 +569,8 @@ check('every KPI card has a spoken description', kpiCards.every((card) => card.a
 const noComparisonCards = buildKpiCards(kpiStats, false);
 check('growth is withheld without a comparison period', noComparisonCards[1].value === '—');
 check('no fabricated trend is emitted', noComparisonCards[0].trend === undefined);
+check('growth card explains the missing comparison', noComparisonCards[1].hint === 'No earlier period to compare');
+check('growth card has no trend without a comparison', noComparisonCards[1].trend === undefined);
 
 /* -- Order transitions (plan Task 3.5) ------------------------------------- */
 

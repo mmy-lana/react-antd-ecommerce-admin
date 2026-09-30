@@ -630,7 +630,19 @@ check('the shared nav target is the 44px minimum', navTargetStyle.minHeight === 
 
 const dashboardMobile = dashboardAt(390);
 
-check('the dashboard renders its KPIs', dashboardMobile.includes('Total revenue'));
+// Assert the KPI card titles, not the donut's centre caption: the caption is
+// deliberately "Product Sales" because it sums line-item subtotals and is not
+// reconcilable against the "Total Revenue" KPI (FIN-DATA-01).
+check(
+  'the dashboard renders its KPIs',
+  ['Total Revenue', 'Revenue Growth', 'Net Profit', 'Profit Margin', 'Average Order Value', 'Stock Alerts'].every(
+    (title) => dashboardMobile.includes(title),
+  ),
+);
+check(
+  'the donut centre is captioned as product sales, not total revenue (FIN-DATA-01)',
+  dashboardMobile.includes('Product Sales') && !dashboardMobile.includes('>Total revenue<'),
+);
 check('the dashboard renders the revenue chart', dashboardMobile.includes('Revenue and profit over time'));
 check('the dashboard renders the category breakdown', dashboardMobile.includes('Revenue by category'));
 check('the dashboard renders recent orders', dashboardMobile.includes('Recent orders'));

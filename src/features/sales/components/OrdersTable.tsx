@@ -216,6 +216,17 @@ export const OrdersTable: FC<OrdersTableProps> = ({
                 not recognised
               </Typography.Text>
             ) : null}
+            {!recognisedOrder ? (
+              // `text-decoration: line-through` is a purely visual convention
+              // that screen readers do not announce, so a struck-through total
+              // is still read as an ordinary amount. This states the reason in
+              // text for assistive technology; the caption above stays for
+              // sighted users. `visually-hidden` keeps the box out of the row's
+              // layout, so it cannot reintroduce a stretched cell.
+              <span className="visually-hidden">
+                Cancelled or refunded order, revenue not recognised
+              </span>
+            ) : null}
           </div>
         );
       },

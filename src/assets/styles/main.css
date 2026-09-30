@@ -193,6 +193,14 @@ canvas {
 
 .status-badge {
   vertical-align: middle;
+  /* A belt-and-braces counterpart to the inline styles: these also apply to
+     badges rendered outside `StatusBadge`'s own props (e.g. inside a portal),
+     where `align-items: stretch` on an ancestor would otherwise win. */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-height: 28px;
+  box-sizing: border-box;
 }
 
 .status-badge--interactive {
@@ -239,7 +247,14 @@ canvas {
   letter-spacing: 0.04em;
   font-size: 12px;
   font-weight: 600;
-  white-space: nowrap;
+  /* `!important` because Ant Design sets `white-space` on `.ant-table-cell`
+     itself, and an ellipsised header ("Updat…") hides a sortable column's
+     affordance entirely. Header labels are short by design, so let the table
+     scroll rather than truncate the label. */
+  white-space: nowrap !important;
+  /* Room for the sorter arrows, which sit inline after the label and were
+     previously crowding it against the cell edge. */
+  padding-inline: 12px !important;
 }
 
 /* -------------------------------------------------------------------------- */

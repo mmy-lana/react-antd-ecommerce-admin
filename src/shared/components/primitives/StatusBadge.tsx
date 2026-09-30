@@ -96,13 +96,29 @@ export const StatusBadge: FC<StatusBadgeProps> = ({
     borderRadius: 999,
     fontSize: compact ? fontTokens.fontSizeTiny : fontTokens.fontSizeSmall,
     fontWeight: 600,
-    lineHeight: compact ? 18 : 22,
+    lineHeight: compact ? '18px' : '22px',
+    // The pill is sized explicitly rather than derived from its line box. A
+    // flex parent with `align-items: stretch` — a table row, a list item — used
+    // to stretch a badge whose only height came from `line-height` + padding
+    // into a tall vertical sausage. `boxSizing: border-box` keeps the border
+    // inside the declared height, and `alignSelf: center` stops the stretch
+    // from reaching the pill at all.
+    height: compact ? 22 : 26,
+    boxSizing: 'border-box',
+    alignSelf: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
     whiteSpace: 'nowrap',
     background: colors.surface,
     border: `1px solid ${colors.border}`,
     color: colors.text,
-    ...(onClick ? touchStyle : {}),
   };
+
+  // Read-only badges are capped outright. The interactive variant is not: a
+  // trigger has to keep its 44px touch target, and a `max-height` on a pill
+  // whose `min-height` is 44 is a rule that silently loses. It still opts out
+  // of stretching, so the row-height bug cannot come back through the button.
+  const readOnlySize: CSSProperties = { maxHeight: compact ? 22 : 26 };
 
   const content = (
     <>
@@ -132,6 +148,7 @@ export const StatusBadge: FC<StatusBadgeProps> = ({
       onClick={onClick}
       style={{
         ...pillStyle,
+        ...touchStyle,
         ...style,
         cursor: 'pointer',
         fontFamily: fontTokens.fontFamily,
@@ -143,7 +160,7 @@ export const StatusBadge: FC<StatusBadgeProps> = ({
     <span
       className={['status-badge', className].filter(Boolean).join(' ')}
       aria-label={accessibleName}
-      style={{ ...pillStyle, ...style }}
+      style={{ ...pillStyle, ...readOnlySize, ...style }}
     >
       {content}
     </span>
