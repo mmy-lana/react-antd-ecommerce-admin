@@ -1,10 +1,12 @@
 import { Suspense, lazy, useCallback, useEffect, useState, type FC, type ReactNode } from 'react';
-import { App as AntdApp, Button, ConfigProvider, Result, Spin, Typography } from 'antd';
+import { App as AntdApp, Button, ConfigProvider, Result, Space, Spin, Typography } from 'antd';
 
 import { Router, type RoutePath } from './Router';
 import { themeConfig } from './theme/themeConfig';
-import { databaseReady } from '../shared/db/dexieDb';
+import { clearAllTables, databaseReady } from '../shared/db/dexieDb';
 import { seedDatabaseIfEmpty } from '../shared/db/seedData';
+import { ErrorBoundary } from '../shared/components/feedback/ErrorBoundary';
+import { colorTokens, fontTokens, layoutTokens } from './theme/tokens';
 import { useInventory } from '../features/inventory/hooks/useInventory';
 import { DashboardLayout } from '../shared/components/layout/DashboardLayout';
 
@@ -70,6 +72,95 @@ const RouteFallback: FC<{ label: string }> = ({ label }) => (
     <Spin size="large" />
     <Typography.Text style={{ marginInlineStart: 12 }}>{label}</Typography.Text>
   </div>
+);
+
+/**
+ * Restores the demo workspace to a known-good state.
+ *
+ * A corrupted or schema-drifted IndexedDB is the one failure a plain remount
+ * cannot fix, so the fallback offers this alongside a reload. Exported for the
+ * verification suite, which drives it directly.
+ */
+export const resetDemoData = async (): Promise<void> => {
+  await clearAllTables();
+  await seedDatabaseIfEmpty();
+};
+
+/**
+ * Workspace-level error boundary.
+ *
+ * Sits outside {@link WorkspaceLayout} so the header counters and the navigation
+ * rail cannot themselves take the app down, and outside the router so a failure
+ * in one screen still leaves the other two reachable. Both recovery paths are
+ * offered because they fail differently: reload clears a transient fault, reset
+ * clears a persisted one.
+ */
+const WorkspaceErrorBoundary: FC<{ children: ReactNode }> = ({ children }) => (
+  <ErrorBoundary
+    label="Commerce Admin Workspace"
+    fallback={(error, reset) => (
+      <div
+        role="alert"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '100vh',
+          padding: 24,
+        }}
+      >
+        <Result
+          status="error"
+          title="The workspace hit an unexpected error"
+          subTitle={
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
+                alignItems: 'center',
+              }}
+            >
+              <Typography.Text type="secondary">
+                Nothing was lost. Reload to retry, or reset the demo data if the problem
+                persists in this browser.
+              </Typography.Text>
+              <Typography.Text
+                code
+                style={{
+                  color: colorTokens.textTertiary,
+                  fontSize: fontTokens.fontSizeTiny,
+                  maxWidth: 560,
+                  overflowWrap: 'anywhere',
+                  textAlign: 'left',
+                }}
+              >
+                {error.message}
+              </Typography.Text>
+            </div>
+          }
+          extra={
+            <Space.Compact>
+              <Button type="primary" onClick={reset} style={{ minHeight: layoutTokens.touchTargetMinSize }}>
+                Reload Workspace
+              </Button>
+              <Button
+                danger
+                onClick={() => {
+                  void resetDemoData().then(() => window.location.reload());
+                }}
+                style={{ minHeight: layoutTokens.touchTargetMinSize }}
+              >
+                Reset Demo Data
+              </Button>
+            </Space.Compact>
+          }
+        />
+      </div>
+    )}
+  >
+    {children}
+  </ErrorBoundary>
 );
 
 /**
@@ -194,7 +285,11 @@ const AppShell: FC = () => {
     );
   }
 
-  return <Router renderView={renderRouteView} />;
+  return (
+    <WorkspaceErrorBoundary>
+      <Router renderView={renderRouteView} />
+    </WorkspaceErrorBoundary>
+  );
 };
 
 /**

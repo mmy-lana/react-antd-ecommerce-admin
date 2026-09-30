@@ -476,16 +476,17 @@ export const InventoryView: FC = () => {
   };
 
   const batchRestock = async (productIds: readonly UUID[], quantity: number): Promise<void> => {
-    for (const productId of productIds) {
-      // Sequential on purpose: each restock is its own transaction, and a
-      // partial failure must not silently roll the earlier ones back.
-      await mutations.mutateProductStock({
+    // One transaction for the whole selection. Looping per product left the
+    // ledger describing a half-applied restock whenever a later product failed
+    // validation, with nothing recording which half had landed.
+    await mutations.batchProductStock(
+      productIds.map((productId) => ({
         productId,
-        changeType: 'restock',
+        changeType: 'restock' as const,
         quantity,
         reason: BATCH_RESTOCK_REASON,
-      });
-    }
+      })),
+    );
   };
 
   return (
@@ -524,8 +525,10 @@ export const InventoryView: FC = () => {
         }
         onArchive={(ids) =>
           run(
+            // All-or-nothing: hiding some of a selection while the user believes
+            // the whole thing was archived is worse than not archiving at all.
             async () => {
-              for (const id of ids) await mutations.archiveProduct(id);
+              await mutations.archiveProducts(ids);
             },
             `Archived ${ids.length} product${ids.length === 1 ? '' : 's'}.`,
           )

@@ -89,8 +89,17 @@ export const DashboardLayoutBody: FC<DashboardLayoutBodyProps> = ({
           {...(navigation.isMobile ? { onOpenNavigation: navigation.openDrawer } : {})}
         />
 
-        <main
-          id="main-content"
+        {/*
+          A `<section>`, not a second `<main>`.
+
+          `Router` already renders the document's only `<main id="main-content">`
+          landmark around every routed view, and this layout renders *inside* it.
+          Two nested `<main>` elements is invalid HTML and two elements sharing
+          one id breaks the skip link and duplicate-id lookups. This is the
+          workspace region within the main, so it stays a labelled section.
+        */}
+        <section
+          aria-label={`${ROUTE_TITLES[currentRoute]} workspace`}
           tabIndex={-1}
           style={{
             flex: 1,
@@ -106,7 +115,7 @@ export const DashboardLayoutBody: FC<DashboardLayoutBodyProps> = ({
             style={{ fontSize: fontTokens.fontSizeSmall }}
           />
           {children}
-        </main>
+        </section>
       </div>
 
       <MobileNavDrawer

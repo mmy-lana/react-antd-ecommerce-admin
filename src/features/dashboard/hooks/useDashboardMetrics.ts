@@ -19,12 +19,14 @@ import isoWeek from 'dayjs/plugin/isoWeek';
 import utc from 'dayjs/plugin/utc';
 
 import { db } from '../../../shared/db/dexieDb';
+import { roundToCents } from '../../../shared/utils/currency';
 import {
   isRevenueRecognizedOrder,
   type CategorySalesPoint,
   type DateRangeFilter,
   type KPIStats,
   type Order,
+  type OrderItem,
   type Product,
   type SalesTimeSeriesPoint,
   type UUID,
@@ -121,7 +123,7 @@ export interface PeriodTotals {
 
 /** Tally one period. Cancelled and refunded orders contribute nothing. */
 export const tallyOrders = (orders: readonly Order[]): PeriodTotals => {
-  const round2 = (value: number): number => Math.round((value + Number.EPSILON) * 100) / 100;
+  const round2 = roundToCents;
   let revenue = 0;
   let grossProfit = 0;
   let unitsSold = 0;
@@ -296,13 +298,62 @@ export interface DashboardMetrics {
   error: string | null;
 }
 
-const matchesDashboardSearch = (product: Product, query: string): boolean => {
+export const matchesDashboardSearch = (product: Product, query: string): boolean => {
   const trimmed = query.trim().toLowerCase();
   if (trimmed === '') return true;
   const haystack = [product.name, product.sku, product.brand, product.category]
     .join(' ')
     .toLowerCase();
   return trimmed.split(/\s+/).every((term) => haystack.includes(term));
+};
+
+/**
+ * Attributes an order's money to the subset of lines that passed the filter.
+ *
+ * The defect this replaces was `order.items.every(...)`, which dropped any order
+ * containing a single line outside the visible set. Filtering to `Audio` threw
+ * away a two-item order that held one Audio line, so that line's revenue was
+ * counted for no category at all.
+ *
+ * Each monetary field is prorated by the visible lines' share of the order's
+ * line subtotals. Prorating rather than re-deriving keeps the filter *additive*:
+ * scoping the same order by `Audio`, then `Apparel`, then everything else sums
+ * back to the original total, so no filter can inflate or destroy revenue.
+ *
+ * Returns `null` when nothing survives, which is how the caller drops the order
+ * entirely.
+ */
+export const scopeOrderToVisibleLines = (
+  order: Order,
+  visibleProductIds: ReadonlySet<UUID>,
+): Order | null => {
+  const items = order.items.filter((item) => visibleProductIds.has(item.productId));
+  if (items.length === 0) return null;
+  if (items.length === order.items.length) return order;
+
+  const sumSubtotals = (lines: readonly OrderItem[]): number =>
+    lines.reduce((total, line) => total + line.subtotal, 0);
+
+  const allSubtotal = sumSubtotals(order.items);
+  // A zero-subtotal order cannot be split by ratio; fall back to splitting by
+  // line count so the result still degrades to something defensible.
+  const share =
+    allSubtotal > 0
+      ? sumSubtotals(items) / allSubtotal
+      : items.length / order.items.length;
+
+  const prorate = (amount: number): number => roundToCents(amount * share);
+
+  return {
+    ...order,
+    items,
+    subtotal: roundToCents(sumSubtotals(items)),
+    discountAmount: prorate(order.discountAmount),
+    taxAmount: prorate(order.taxAmount),
+    shippingFee: prorate(order.shippingFee),
+    totalAmount: prorate(order.totalAmount),
+    netProfit: prorate(order.netProfit),
+  };
 };
 
 export const useDashboardMetrics = (options: UseDashboardMetricsOptions): DashboardMetrics => {
@@ -342,8 +393,11 @@ export const useDashboardMetrics = (options: UseDashboardMetricsOptions): Dashbo
 
   const visibleProductIds = useMemo(() => new Set(visibleProducts.map((product) => product.id)), [visibleProducts]);
 
-  const scopedOrders = useMemo(
-    () => orders.filter((order) => order.items.every((item) => visibleProductIds.has(item.productId))),
+    const scopedOrders = useMemo(
+    () =>
+      orders
+        .map((order) => scopeOrderToVisibleLines(order, visibleProductIds))
+        .filter((order): order is Order => order !== null),
     [orders, visibleProductIds],
   );
 

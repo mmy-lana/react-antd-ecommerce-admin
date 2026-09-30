@@ -14,6 +14,7 @@
 import { DownloadOutlined, EyeOutlined } from '@ant-design/icons';
 import { Button, Segmented, Space, Table, Tooltip, Typography } from 'antd';
 import type { TableColumnsType } from 'antd';
+import { virtualTableSemantics } from '../../../shared/components/table/virtualTableSemantics';
 import type { ColumnType } from 'antd/es/table/interface';
 import type { Key } from 'antd/es/table/interface';
 import { useMemo, type CSSProperties, type FC, type ReactNode } from 'react';
@@ -378,6 +379,7 @@ export const OrdersTable: FC<OrdersTableProps> = ({
           loading={false}
           scroll={{ x: Math.max(resolveTableWidth(columns), scrollY + 1), y: scrollY }}
           virtual
+          components={virtualTableSemantics<Order>()}
           sticky
           onRow={(order: Order) =>
             onOpenOrder

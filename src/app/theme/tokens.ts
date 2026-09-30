@@ -220,6 +220,14 @@ export const layoutTokens = {
   contentPadding: 24,
   contentPaddingCompact: 12,
   gridGutter: 16,
+  /**
+   * Vertical gap between form rows.
+   *
+   * `Space.Compact` is not a `Form.Item`, so it gets none of the form's own
+   * bottom margin. That gap was previously a hard-coded `16` repeated at every
+   * call site; it is a theme value here so the whole form retunes in one place.
+   */
+  formRowGap: 16,
   tableRowHeight: 52,
   metricCardMinHeight: 132,
 } as const;

@@ -14,6 +14,7 @@
 
 import { ZoomInOutlined, ZoomOutOutlined } from '@ant-design/icons';
 import { Area, type AreaConfig } from '@ant-design/plots';
+import { withDisabledAnimation } from './chartAnimation';
 import { Button, Segmented, Slider, Space, Tooltip, Typography } from 'antd';
 import { useCallback, useEffect, useMemo, useState, type FC, type ReactNode } from 'react';
 
@@ -139,7 +140,9 @@ export const buildRevenueChartConfig = ({
   const definition = REVENUE_SERIES.find((entry) => entry.key === series) ?? REVENUE_SERIES[0];
   const stroke = chartPalette[0];
 
-  return {
+  // Animation is off on purpose; see `withDisabledAnimation` for the uncaught
+  // `TypeError` from G2's path interpolation that it prevents.
+  return withDisabledAnimation({
     data: [...data],
     xField: 'date',
     yField: series,
@@ -202,7 +205,7 @@ export const buildRevenueChartConfig = ({
       tooltip: { marker: true },
     },
     legend: false,
-  };
+  });
 };
 
 /* -------------------------------------------------------------------------- */

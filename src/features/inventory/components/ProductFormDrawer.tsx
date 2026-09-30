@@ -228,7 +228,7 @@ export const ProductFormFields: FC<{
           <Input maxLength={120} placeholder="Aurora Wireless Headphones" aria-label="Product name" />
         </Form.Item>
 
-        <Space.Compact block style={{ marginBottom: 16 }}>
+        <Space.Compact block style={{ marginBottom: layoutTokens.formRowGap }}>
           <Form.Item
             name="sku"
             label="SKU"
@@ -251,7 +251,7 @@ export const ProductFormFields: FC<{
           </Form.Item>
         </Space.Compact>
 
-        <Space.Compact block style={{ marginBottom: 16 }}>
+        <Space.Compact block style={{ marginBottom: layoutTokens.formRowGap }}>
           <Form.Item
             name="category"
             label="Category"
@@ -288,7 +288,7 @@ export const ProductFormFields: FC<{
           />
         </Form.Item>
 
-        <Space.Compact block style={{ marginBottom: 16 }}>
+        <Space.Compact block style={{ marginBottom: layoutTokens.formRowGap }}>
           <Form.Item
             name="basePrice"
             label="Base price"
@@ -568,7 +568,7 @@ export const ProductFormDrawer: FC<ProductFormDrawerProps> = ({
     <Drawer
       open={open}
       onClose={onClose}
-      width={width}
+      size={width}
       title={isEditing ? `Edit ${product.name}` : 'New product'}
       aria-label={isEditing ? `Edit product ${product.name}` : 'Create a new product'}
       destroyOnHidden

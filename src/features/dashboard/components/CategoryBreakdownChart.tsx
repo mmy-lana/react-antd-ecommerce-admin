@@ -11,6 +11,7 @@
  */
 
 import { Pie, type PieConfig } from '@ant-design/plots';
+import { withDisabledAnimation } from './chartAnimation';
 import { Typography } from 'antd';
 import { useCallback, useMemo, useState, type FC, type ReactNode } from 'react';
 
@@ -100,7 +101,7 @@ export const buildCategoryDonutConfig = ({
   width,
   height,
   totalRevenue,
-}: CategoryDonutConfigInput): PieConfig => ({
+}: CategoryDonutConfigInput): PieConfig => withDisabledAnimation({
   data: slices.map((slice) => ({ category: slice.category, revenue: slice.revenue })),
   angleField: 'revenue',
   colorField: 'category',
@@ -109,6 +110,21 @@ export const buildCategoryDonutConfig = ({
   width,
   height,
   autoFit: false,
+
+  // Enter/update/exit animation is disabled deliberately.
+  //
+  // `@ant-design/plots` 2.x drives the Web Animations API directly, and its path
+  // interpolation (`getRotatedCurve` → `CSSPropertyPath.mergePaths`) walks a
+  // segment index that can run past the end of the first path whenever a shape is
+  // not measurable at animation time. That dereference throws an *uncaught*
+  // `TypeError` from inside a `new KeyframeEffect(...)` constructor, so no React
+  // error boundary can catch it: it escapes as a page-level exception on every
+  // dashboard render.
+  //
+  // These charts redraw on every filter change and hold no state worth
+  // animating, so a still chart is a better trade than a guaranteed exception.
+  // It also matches the project's existing `prefers-reduced-motion` policy.
+  animate: { enter: false, update: false, exit: false },
   scale: {
     color: { range: slices.map((slice) => slice.color) },
   },

@@ -3,6 +3,7 @@ node_modules
 dist
 dist-ssr
 .verify-cache
+.verify-cache-e2e
 *.tsbuildinfo
 *.local
 .env

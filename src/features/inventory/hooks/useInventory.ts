@@ -60,6 +60,34 @@ export const DEFAULT_INVENTORY_SORT: InventorySort = { key: 'name', direction: '
 /* -------------------------------------------------------------------------- */
 
 /**
+ * Locale-aware name comparison.
+ *
+ * Exported so the ordering rule is assertable on its own, and shared with the
+ * in-memory fallback below so both paths cannot drift.
+ */
+export const compareProductsByName = (left: Product, right: Product): number =>
+  left.name.localeCompare(right.name, undefined, { numeric: true, sensitivity: 'base' });
+
+/**
+ * Reads the catalogue in alphabetical order.
+ *
+ * Uses the `name` index when the schema has it — Dexie raises `SchemaError` on
+ * an unindexed `orderBy` — and otherwise falls back to reading the store and
+ * sorting in memory. `Intl.Collator` gives the same ordering on both paths, so
+ * the fallback is not merely non-crashing but visually identical.
+ */
+export const loadProductsAlphabetically = async (): Promise<Product[]> => {
+  try {
+    return await db.products.orderBy('name').toArray();
+  } catch (cause) {
+    const isMissingIndex = cause instanceof Error && /not indexed|SchemaError/i.test(cause.message);
+    if (!isMissingIndex) throw cause;
+    const all = await db.products.toArray();
+    return all.sort(compareProductsByName);
+  }
+};
+
+/**
  * Every field a shopper would plausibly type. Variants are included so a search
  * for a size or colour finds the parent product.
  */
@@ -275,7 +303,12 @@ export const useInventory = (options: UseInventoryOptions = {}): InventoryQueryR
 
   // `undefined` is the sentinel for "still loading": `useLiveQuery` returns the
   // default only before the first observation, never on a later re-render.
-  const liveProducts = useLiveQuery<Product[]>(() => db.products.orderBy('name').toArray(), []);
+  //
+  // `orderBy` resolves against a declared index, so it throws `SchemaError` if
+  // `name` is ever missing — which would reject the live query and leave the
+  // catalogue permanently blank. A bare `toArray()` plus an in-memory sort keeps
+  // the screen usable through that failure instead of taking it down.
+  const liveProducts = useLiveQuery<Product[]>(loadProductsAlphabetically, []);
   const loadError = useLiveQuery<string | null>(
     async () => {
       try {

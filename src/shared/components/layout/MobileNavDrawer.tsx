@@ -98,6 +98,15 @@ export interface MobileNavDrawerProps {
  * `placement="left"` and `mask={{ closable: false }}` are deliberate: the drawer
  * is the primary navigation below 768px, so tapping the scrim should not
  * dismiss it and lose the user's place. Escape and the close button remain.
+ *
+ * Two Ant Design 6 API notes, both checked against `Drawer.d.ts`:
+ *
+ * - `size` carries the panel width; the `width` prop is deprecated in its favour.
+ *   It accepts a number or a CSS length, so `320` and `'100%'` are both valid.
+ * - `mask={{ closable: false }}` is the *current* spelling. The bare
+ *   `maskClosable` prop is the deprecated one — `MaskConfig.closable` is what
+ *   `normalizeMaskConfig` reads — so moving to `maskClosable={false}` would
+ *   reintroduce the deprecation warning this component avoids.
  */
 export const MobileNavDrawer: FC<MobileNavDrawerProps> = ({
   open,
@@ -116,7 +125,7 @@ export const MobileNavDrawer: FC<MobileNavDrawerProps> = ({
       open={open}
       onClose={onClose}
       placement="left"
-      width={width}
+      size={width}
       mask={{ closable: false }}
       closable={false}
       title={null}

@@ -8,7 +8,9 @@
     "build": "tsc && vite build",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.scripts.json",
     "preview": "vite preview",
-    "verify:domain": "vite build --config scripts/vite.verify-domain.config.ts && node .verify-cache/verify-domain.mjs && node .verify-cache/verify-storage.mjs && node .verify-cache/verify-components.mjs && node .verify-cache/verify-hooks.mjs && node .verify-cache/verify-layout.mjs"
+    "verify:domain": "vite build --config scripts/vite.verify-domain.config.ts && node .verify-cache/verify-domain.mjs && node .verify-cache/verify-storage.mjs && node .verify-cache/verify-components.mjs && node .verify-cache/verify-hooks.mjs && node .verify-cache/verify-layout.mjs",
+    "verify:e2e": "pnpm run build && vite build --config scripts/vite.verify-e2e.config.ts && node .verify-cache-e2e/verify-e2e.mjs",
+    "verify": "pnpm run verify:domain && pnpm run verify:e2e"
   },
   "dependencies": {
     "@ant-design/icons": "latest",
@@ -26,6 +28,7 @@
     "@types/react-dom": "latest",
     "@vitejs/plugin-react": "latest",
     "fake-indexeddb": "^6.2.5",
+    "playwright": "^1.63.0",
     "typescript": "latest",
     "vite": "latest"
   }

@@ -21,6 +21,8 @@ const { db, clearAllTables, databaseReady, getTableCounts } = await import('../s
 const { isDatabaseSeeded, resetAndSeedDatabase, seedDatabase, seedDatabaseIfEmpty } =
   await import('../src/shared/db/seedData');
 const { activeVariants } = await import('../src/shared/utils/stockStatus');
+const { loadProductsAlphabetically } = await import('../src/features/inventory/hooks/useInventory');
+const { applyBatchStockChange, archiveProducts } = await import('../src/features/inventory/hooks/useProductMutations');
 
 const failures: string[] = [];
 let assertions = 0;
@@ -154,6 +156,117 @@ const run = async (): Promise<void> => {
     duplicateRejected = true;
   }
   check('duplicate primary keys are rejected', duplicateRejected);
+
+
+  /* ------------------------------------------------------------------ */
+  /* Regressions: DATA-01 index, DATA-02 atomic batch                    */
+  /* ------------------------------------------------------------------ */
+
+  // DATA-01 — `orderBy('name')` throws `SchemaError: KeyPath name on object
+  // store products is not indexed` when the index is missing, which blanked
+  // the whole app on first paint.
+  {
+    let indexedNames: string[] = [];
+    let resolved = true;
+    try {
+      indexedNames = (await db.products.orderBy('name').toArray()).map((product) => product.name);
+    } catch (cause) {
+      resolved = false;
+      console.error(cause);
+    }
+    check('orderBy("name") resolves against the live schema (DATA-01)', resolved);
+    check(
+      'orderBy("name") returns the catalogue alphabetically',
+      indexedNames.length > 0 &&
+        indexedNames.every((name, index) => index === 0 || indexedNames[index - 1].localeCompare(name) <= 0),
+      `${indexedNames.length} rows`,
+    );
+
+    const loaded = await loadProductsAlphabetically();
+    check(
+      'loadProductsAlphabetically returns every product',
+      loaded.length === indexedNames.length,
+      `${loaded.length} vs ${indexedNames.length}`,
+    );
+    check(
+      'loadProductsAlphabetically is already ordered',
+      loaded.every((product, index) => index === 0 || loaded[index - 1].name.localeCompare(product.name) <= 0),
+    );
+  }
+
+  // DATA-02 — a batch that fails part way must not leave half the rows
+  // written, and archiving must be all-or-nothing too.
+  {
+    const before = (await db.products.toArray()).sort((a, b) => a.id.localeCompare(b.id));
+    const targets = before.slice(0, 3);
+    const results = await applyBatchStockChange(
+      targets.map((product) => ({
+        productId: product.id,
+        changeType: 'restock' as const,
+        quantity: 5,
+        reason: 'regression batch',
+      })),
+    );
+    check('a batch stock change reports one result per request', results.length === targets.length, `${results.length}`);
+
+    const after = (await db.products.toArray()).sort((a, b) => a.id.localeCompare(b.id));
+    check(
+      'every product in the batch moved by the requested quantity',
+      targets.every((product) => {
+        const updated = after.find((candidate) => candidate.id === product.id);
+        return updated !== undefined && updated.totalStock === product.totalStock + 5;
+      }),
+    );
+    check(
+      'the batch wrote a log entry per product',
+      (await db.inventoryLogs.where('productId').anyOf(targets.map((product) => product.id)).count()) >= targets.length,
+    );
+
+    // A request naming a product that does not exist must roll the whole batch
+    // back rather than persisting the rows that happened to succeed first.
+    const snapshot = (await db.products.toArray()).sort((a, b) => a.id.localeCompare(b.id));
+    const logCountBefore = await db.inventoryLogs.count();
+    let threw = false;
+    try {
+      await applyBatchStockChange([
+        { productId: snapshot[0].id, changeType: 'restock', quantity: 7, reason: 'should roll back' },
+        { productId: 'missing-product', changeType: 'restock', quantity: 7, reason: 'should roll back' },
+      ]);
+    } catch {
+      threw = true;
+    }
+    check('a batch with an unknown product throws', threw);
+    const rolledBack = (await db.products.toArray()).sort((a, b) => a.id.localeCompare(b.id));
+    check(
+      'the failed batch rolled every product back',
+      rolledBack.every(
+        (product) => product.totalStock === snapshot.find((entry) => entry.id === product.id)?.totalStock,
+      ),
+    );
+    check('the failed batch wrote no log entries', (await db.inventoryLogs.count()) === logCountBefore);
+
+    // Archiving is likewise one transaction over every requested product. The
+    // seed already contains archived rows, so "unchanged" — not "still live" —
+    // is the correct invariant for everything not named in the call.
+    const toArchive = snapshot.slice(0, 2);
+    await archiveProducts(toArchive.map((product) => product.id));
+    const archived = (await db.products.toArray()).sort((a, b) => a.id.localeCompare(b.id));
+    const archiveIds = new Set(toArchive.map((product) => product.id));
+    check(
+      'archiveProducts soft-deletes every requested product',
+      toArchive.every((product) => {
+        const updated = archived.find((candidate) => candidate.id === product.id);
+        return updated !== undefined && typeof updated.deletedAt === 'string';
+      }),
+    );
+    check(
+      'archiveProducts leaves every other product untouched',
+      archived
+        .filter((product) => !archiveIds.has(product.id))
+        .every((product) => product.deletedAt === snapshot.find((entry) => entry.id === product.id)?.deletedAt),
+    );
+    check('archiveProducts did not delete rows outright', archived.length === snapshot.length, `${archived.length}`);
+  }
 
   console.log(`\n[storage] ${assertions - failures.length}/${assertions} assertions passed`);
   if (failures.length > 0) {

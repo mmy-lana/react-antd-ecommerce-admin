@@ -21,6 +21,7 @@ import { InboxOutlined, UnorderedListOutlined } from '@ant-design/icons';
 import { Button, Descriptions, Space, Table, Tooltip, Typography } from 'antd';
 import type { Key } from 'antd/es/table/interface';
 import type { TableColumnsType } from 'antd';
+import { virtualTableSemantics } from '../../../shared/components/table/virtualTableSemantics';
 import type { ColumnType } from 'antd/es/table/interface';
 import {
   useCallback,
@@ -498,6 +499,7 @@ export const InventoryTable: FC<InventoryTableProps> = ({
           loading={false}
           scroll={{ x: Math.max(resolveTableWidth(columns), scrollY + 1), y: scrollY }}
           virtual
+          components={virtualTableSemantics<Product>()}
           sticky
           expandable={
             hasVariants

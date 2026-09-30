@@ -10,7 +10,10 @@
  * One extra hardening step beyond the spec: Excel and Sheets treat a leading
  * `=`, `+`, `-` or `@` in a *text* field as a formula. Those values are
  * prefixed with an apostrophe so an exported product name can never execute.
- * Numeric cells are exempt — a negative amount must stay negative.
+ * Numeric cells are exempt — a negative amount must stay negative — and the
+ * exemption is decided by {@link needsFormulaGuard} rather than by the field's
+ * JS type, because formatted money is a string that must still be treated as a
+ * number.
  */
 
 import type { InventoryLog, Order, Product } from '../types';
@@ -46,6 +49,31 @@ const UTF8_BOM = '\uFEFF';
 const FORMULA_TRIGGER = /^[=+\-@\t\r]/;
 const ILLEGAL_FILENAME_CHARS = /[^a-zA-Z0-9._-]+/g;
 
+/**
+ * A field the spreadsheet would read as a number on its own.
+ *
+ * Covers an optional sign, an optional accounting/currency bracket, a currency
+ * symbol, digit groups with separators, an optional decimal tail and a trailing
+ * percent. This is what separates "a negative amount that must stay negative"
+ * from "a text field that happens to start with a dash".
+ */
+const NUMERIC_CELL = /^[+-]?\(?\s*(?:[$£€¥₹]\s?)?\d[\d,]*(?:\.\d+)?\s*\)?%?$/;
+
+/**
+ * Whether a field needs the apostrophe guard.
+ *
+ * A leading `=`, `+`, `-`, `@`, tab or carriage return only triggers a formula
+ * in a *text* cell. Applying the guard to anything numeric was the original
+ * defect: `formatCurrency(-10)` yields the string `-$10.00`, which was being
+ * written as `'-$10.00`. That both corrupts the figure and forces the column to
+ * text in Excel, so a negative discount or a stock movement reversed the wrong
+ * way exported as a string that no longer sums.
+ */
+export const needsFormulaGuard = (value: string): boolean => {
+  if (!FORMULA_TRIGGER.test(value)) return false;
+  return !NUMERIC_CELL.test(value.trim());
+};
+
 /* -------------------------------------------------------------------------- */
 /* Field + record serialization                                               */
 /* -------------------------------------------------------------------------- */
@@ -55,7 +83,7 @@ export const escapeCsvField = (value: CsvCell): string => {
 
   const raw =
     typeof value === 'string'
-      ? FORMULA_TRIGGER.test(value)
+      ? needsFormulaGuard(value)
         ? `'${value}`
         : value
       : String(value);

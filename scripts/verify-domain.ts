@@ -19,10 +19,13 @@ import {
   SEED_PRODUCT_COUNT,
 } from '../src/shared/db/seedData';
 import { activeVariants, resolveStockStatus } from '../src/shared/utils/stockStatus';
+import { compareProductsByName } from '../src/features/inventory/hooks/useInventory';
+import { scopeOrderToVisibleLines } from '../src/features/dashboard/hooks/useDashboardMetrics';
 import {
   buildCsvText,
   escapeCsvField,
   inventoryLogCsvColumns,
+  needsFormulaGuard,
   sanitizeCsvFilename,
   salesOrderCsvColumns,
   serializeCsvRow,
@@ -357,6 +360,95 @@ check('csv quoting integration', quoteHeavy.includes('"Contains, a comma and ""q
 
 check('filename sanitize', sanitizeCsvFilename('orders export/final') === 'orders-export-final.csv', sanitizeCsvFilename('orders export/final'));
 check('filename keeps csv', sanitizeCsvFilename('report.csv') === 'report.csv');
+
+
+/* -------------------------------------------------------------------------- */
+/* Regression: fixes from the reliability pass                                 */
+/* -------------------------------------------------------------------------- */
+
+// SEC-01 — a leading `+`/`-` that precedes a plain number is data, not a
+// formula. Guarding it would corrupt every negative-money cell in an export.
+check('negative currency is not formula-guarded', needsFormulaGuard('-$10.00') === false, String(needsFormulaGuard('-$10.00')));
+check('negative decimal is not formula-guarded', needsFormulaGuard('-150.50') === false, String(needsFormulaGuard('-150.50')));
+check('parenthesised negative is not formula-guarded', needsFormulaGuard('(1,200.00)') === false, String(needsFormulaGuard('(1,200.00)')));
+check('negative percent is not formula-guarded', needsFormulaGuard('-12%') === false, String(needsFormulaGuard('-12%')));
+check('plain digits are not formula-guarded', needsFormulaGuard('42') === false);
+check('a real formula is guarded', needsFormulaGuard('=1+1') === true);
+check('a formula dressed as a number is still guarded', needsFormulaGuard('=2+3*4') === true, String(needsFormulaGuard('=2+3*4')));
+check('a leading dash on text is guarded', needsFormulaGuard('-cmd /c calc') === true, String(needsFormulaGuard('-cmd /c calc')));
+check('a plus-prefixed formula is guarded', needsFormulaGuard('+1+1') === true, String(needsFormulaGuard('+1+1')));
+check('exported negative currency survives intact', escapeCsvField('-$10.00') === '-$10.00', escapeCsvField('-$10.00'));
+
+// FIN-01 — `Math.round` rounds .5 toward +Infinity, so a naive half-cent fix
+// rounds a negative half-cent the wrong way. `-0` must not leak out either.
+check('positive half-cent rounds up', roundToCents(10.075) === 10.08, String(roundToCents(10.075)));
+check('negative half-cent rounds away from zero', roundToCents(-10.075) === -10.08, String(roundToCents(-10.075)));
+check('negative one-and-a-bit rounds correctly', roundToCents(-1.005) === -1.01, String(roundToCents(-1.005)));
+check('negative .615 rounds correctly', roundToCents(-0.615) === -0.62, String(roundToCents(-0.615)));
+check('positive half-cent on a smaller magnitude', roundToCents(0.615) === 0.62, String(roundToCents(0.615)));
+check('round trips an exact cent', roundToCents(12.34) === 12.34, String(roundToCents(12.34)));
+check('does not produce negative zero', !Object.is(roundToCents(-0.004), -0), String(roundToCents(-0.004)));
+check('collapses negative zero to zero', Object.is(roundToCents(-0), 0) && !Object.is(roundToCents(-0), -0));
+check('rejects non-finite input', roundToCents(Number.NaN) === 0, String(roundToCents(Number.NaN)));
+
+// FIN-02 — when a category filter hides part of an order, the aggregates must
+// be scoped to the visible lines instead of dropping the whole order.
+{
+  // Some seeded orders carry a single line, where "partial" and "full" are the
+  // same set — pick one that genuinely has more than one line.
+  const order = dataset.orders.find((candidate) => candidate.items.length > 1) ?? dataset.orders[0];
+  const full = scopeOrderToVisibleLines(order, new Set(order.items.map((item) => item.productId)));
+  check('an order with every line visible is returned unchanged', full === order);
+
+  const single = order.items[0];
+  const scoped = scopeOrderToVisibleLines(order, new Set([single.productId]));
+  check('a partially visible order is scoped, not dropped', scoped !== null && scoped !== order);
+  check('the scoped order keeps only the visible line', scoped?.items.length === 1, String(scoped?.items.length));
+  check(
+    'the scoped subtotal equals the visible line subtotal',
+    scoped?.subtotal === roundToCents(scoped?.items[0].subtotal ?? Number.NaN),
+    String(scoped?.subtotal),
+  );
+  check(
+    'the scoped money fields stay proportional to the visible share',
+    scoped !== null &&
+      scoped.totalAmount <= order.totalAmount &&
+      scoped.discountAmount <= order.discountAmount &&
+      scoped.taxAmount <= order.taxAmount,
+  );
+  check(
+    'scoped amounts are rounded to whole cents',
+    scoped !== null &&
+      [scoped.subtotal, scoped.discountAmount, scoped.taxAmount, scoped.shippingFee, scoped.totalAmount, scoped.netProfit].every(
+        (value) => Number.isFinite(value) && Math.abs(value * 100 - Math.round(value * 100)) < 1e-6,
+      ),
+  );
+  check('an order with no visible lines is dropped', scopeOrderToVisibleLines(order, new Set<string>()) === null);
+  check(
+    'a single visible line is never prorated below its own subtotal',
+    scopeOrderToVisibleLines(order, new Set([order.items[0].productId]))?.subtotal === roundToCents(order.items[0].subtotal),
+  );
+}
+
+// DATA-01 — the alphabetical sort must not be a raw lexicographic compare.
+// (`orderBy('name')` itself is asserted in verify-storage, which has IndexedDB.)
+{
+  const sample = dataset.products[0];
+  check(
+    'compareProductsByName sorts numerically, not lexicographically',
+    compareProductsByName({ ...sample, name: 'Item 10' }, { ...sample, name: 'Item 9' }) > 0 &&
+      compareProductsByName({ ...sample, name: 'Item 9' }, { ...sample, name: 'Item 10' }) < 0,
+  );
+  check(
+    'compareProductsByName is case-insensitive',
+    compareProductsByName({ ...sample, name: 'alpha' }, { ...sample, name: 'Beta' }) < 0,
+  );
+  check('compareProductsByName is a total order', compareProductsByName(sample, sample) === 0);
+  check(
+    'compareProductsByName tolerates a missing name',
+    compareProductsByName({ ...sample, name: 'a' }, { ...sample, name: undefined as never }) < 0,
+  );
+}
 
 /* -------------------------------------------------------------------------- */
 

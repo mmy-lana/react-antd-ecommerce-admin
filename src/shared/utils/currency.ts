@@ -72,8 +72,31 @@ const resolveCurrencyOptions = (options: CurrencyFormatOptions = {}): Required<C
 
 const sanitizeNumber = (value: number): number => (Number.isFinite(value) ? value : 0);
 
-/** Rounds to 2 decimals, absorbing the floating point drift of chained sums. */
-export const roundToCents = (value: number): number => Math.round((sanitizeNumber(value) + Number.EPSILON) * 100) / 100;
+/**
+ * Rounds to 2 decimals, absorbing the floating point drift of chained sums.
+ *
+ * The correction is a **signed, magnitude-relative** epsilon. Two reasons it is
+ * not simply `value + Number.EPSILON`:
+ *
+ *  - `Number.EPSILON` is positive, so a fixed nudge biases *upward only*. That
+ *    made every negative tie round the wrong way: `-1.005` returned `-1.00`
+ *    instead of `-1.01`, and `-0.615` returned `-0.61` instead of `-0.62`. In a
+ *    ledger those are real lost cents on refunds, discounts and reversals.
+ *  - It must scale with magnitude, because a literal epsilon is absorbed whole
+ *    by any value above ~4.5e15/100 and, more usefully, is too small to lift
+ *    `10.075` (which is really `10.074999999999999289…`) to `10.08`.
+ *
+ * `Math.sign` carries the direction, so the tie-break matches the sign of the
+ * input in both axes. Finally, `Math.round` returns `-0` for small negatives;
+ * that is normalized to `0` so equality checks, formatting and CSV output agree.
+ */
+export const roundToCents = (value: number): number => {
+  const safe = sanitizeNumber(value);
+  const magnitude = Math.abs(safe);
+  const corrected = safe + Math.sign(safe) * magnitude * Number.EPSILON;
+  const rounded = Math.round(corrected * 100) / 100;
+  return rounded === 0 ? 0 : rounded;
+};
 
 export const formatCurrency = (value: number, options: CurrencyFormatOptions = {}): string =>
   getCurrencyFormatter(resolveCurrencyOptions(options)).format(roundToCents(value));

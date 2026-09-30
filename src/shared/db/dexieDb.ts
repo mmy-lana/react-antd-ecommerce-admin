@@ -44,6 +44,21 @@ db.version(1).stores({
 });
 
 /**
+ * Schema v2 — adds the `name` index on `products`.
+ *
+ * `useInventory` sorts the catalogue alphabetically with
+ * `db.products.orderBy('name')`, and Dexie resolves `orderBy` against a declared
+ * index. Against v1 that throws `SchemaError: KeyPath name on object store
+ * products is not indexed` on the very first render, which takes the whole app
+ * down before the shell mounts. Declared as an upgrade rather than an edit to
+ * v1 so an already-populated browser database migrates in place instead of
+ * being invalidated.
+ */
+db.version(2).stores({
+  products: 'id, sku, name, category, brand, status, totalStock, deletedAt, updatedAt',
+});
+
+/**
  * Resolves once the database is open and upgraded. Await this before the first
  * query so callers never observe a transient `DatabaseClosedError` during boot.
  */

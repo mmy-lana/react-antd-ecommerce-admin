@@ -243,7 +243,11 @@ export const OrderDetailBody: FC<{ order: Order }> = ({ order }) => {
           items={costBreakdownItems(order).map((entry) => ({
             key: entry.key,
             label: entry.label,
-            content: (
+            // `children`, not `content`: `DescriptionsItemProps` exposes the cell
+            // body as `children` and has no `content` key at all, so `content`
+            // was dropped on the floor and every row rendered an empty cell
+            // beside its label.
+            children: (
               <Typography.Text
                 strong={entry.strong}
                 style={{
@@ -338,7 +342,7 @@ export const OrderDetailDrawer: FC<OrderDetailDrawerProps> = ({
     <Drawer
       open={open}
       onClose={onClose}
-      width={width ?? computedWidth}
+      size={width ?? computedWidth}
       title={drawerTitle}
       aria-label={order ? `Order ${order.orderNumber} details` : 'Order details'}
       destroyOnHidden

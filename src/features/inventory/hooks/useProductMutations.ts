@@ -321,9 +321,33 @@ export const applyStockChange = async (request: StockChangeRequest): Promise<Sto
   });
 };
 
-/* -------------------------------------------------------------------------- */
-/* Product create / update / archive                                           */
-/* -------------------------------------------------------------------------- */
+/**
+ * Applies one stock change to each product **atomically**.
+ *
+ * The batch operation this replaces looped over `applyStockChange`, giving each
+ * product its own transaction. That is not a batch: if the ninth of twenty
+ * products failed validation, the first eight were already committed and the
+ * ledger was left describing a restock the user never completed, with nothing
+ * recording which half succeeded.
+ *
+ * Dexie joins a nested transaction to its parent whenever the table scope is
+ * compatible, so the inner `applyStockChange` calls below do *not* open their
+ * own transactions — they participate in this one. Any throw aborts all of them,
+ * and a successful return means every product moved and every ledger row landed.
+ *
+ * Requests apply in the order given, which is what makes two requests against
+ * the same product behave sensibly: each sees the previous one's write.
+ */
+export const applyBatchStockChange = async (
+  requests: readonly StockChangeRequest[],
+): Promise<StockChangeResult[]> =>
+  db.transaction('rw', db.products, db.inventoryLogs, async () => {
+    const results: StockChangeResult[] = [];
+    for (const request of requests) {
+      results.push(await applyStockChange(request));
+    }
+    return results;
+  });
 
 export interface ProductVariantDraft {
   id?: UUID;
@@ -482,11 +506,38 @@ export const restoreProduct = async (productId: UUID, at: string = nowIsoUtc()):
 /* Hook                                                                       */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Archives every product in a single transaction — all of them, or none.
+ *
+ * Same all-or-nothing contract as {@link applyBatchStockChange}: a soft delete
+ * that half-succeeds would hide some products from the catalogue while the
+ * user believed the whole selection was archived.
+ */
+export const archiveProducts = async (
+  productIds: readonly UUID[],
+  at: string = nowIsoUtc(),
+): Promise<Product[]> =>
+  db.transaction('rw', db.products, async () => {
+    const archived: Product[] = [];
+    for (const productId of productIds) {
+      archived.push(await archiveProduct(productId, at));
+    }
+    return archived;
+  });
+
+/* -------------------------------------------------------------------------- */
+/* Product create / update / archive                                           */
+/* -------------------------------------------------------------------------- */
+
 export interface ProductMutations {
   mutateProductStock: (request: StockChangeRequest) => Promise<StockChangeResult>;
+  /** All-or-nothing across every request; one failure aborts the whole batch. */
+  batchProductStock: (requests: readonly StockChangeRequest[]) => Promise<StockChangeResult[]>;
   createProduct: (draft: ProductDraft) => Promise<Product>;
   updateProduct: (productId: UUID, draft: ProductDraft) => Promise<Product>;
   archiveProduct: (productId: UUID) => Promise<Product>;
+  /** All-or-nothing across every id. */
+  archiveProducts: (productIds: readonly UUID[]) => Promise<Product[]>;
   restoreProduct: (productId: UUID) => Promise<Product>;
   pending: boolean;
   error: string | null;
@@ -519,9 +570,11 @@ export const useProductMutations = (): ProductMutations => {
   return useMemo<ProductMutations>(
     () => ({
       mutateProductStock: (request) => run(() => applyStockChange(request)),
+      batchProductStock: (requests) => run(() => applyBatchStockChange(requests)),
       createProduct: (draft) => run(() => createProduct(draft)),
       updateProduct: (productId, draft) => run(() => updateProduct(productId, draft)),
       archiveProduct: (productId) => run(() => archiveProduct(productId)),
+      archiveProducts: (productIds) => run(() => archiveProducts(productIds)),
       restoreProduct: (productId) => run(() => restoreProduct(productId)),
       pending,
       error,

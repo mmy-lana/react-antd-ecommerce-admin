@@ -319,7 +319,13 @@ const shellDesktop = renderAt(
   </DashboardLayoutBody>,
 );
 check('the shell renders its content', shellDesktop.includes('dashboard content'));
-check('the shell has a main landmark', shellDesktop.includes('id="main-content"'));
+// `Router` owns the document's single `<main id="main-content">` and renders
+// this layout *inside* it. The shell therefore must not emit a second one —
+// nesting two `<main>` elements is invalid HTML and reusing the id breaks the
+// skip link. (The real document is asserted in the headless e2e run.)
+check('the shell does not claim the main landmark', !shellDesktop.includes('<main'));
+check('the shell does not duplicate the main-content id', !shellDesktop.includes('id="main-content"'));
+check('the shell renders a labelled workspace region', shellDesktop.includes('aria-label="Dashboard workspace"'));
 check('the desktop shell has a sidebar', shellDesktop.includes('id="primary-sidebar"'));
 check('the desktop shell has exactly one nav landmark', countOccurrences(shellDesktop, 'aria-label="Primary"') === 1);
 check('the desktop shell has no open navigation button', !shellDesktop.includes('aria-label="Open navigation"'));
@@ -533,7 +539,10 @@ for (const width of REQUIRED_VIEWPORTS) {
   ] as const) {
     check(`${name} renders at ${width}px`, markup.length > 0);
     check(`${name} has no viewport-width overflow at ${width}px`, !markup.includes('100vw'));
-    check(`${name} has a content landmark at ${width}px`, markup.includes('id="main-content"'));
+    // See above: the landmark belongs to `Router`, and the view bodies are
+    // rendered here without it. What they must not do is add their own.
+    check(`${name} does not nest a second main landmark at ${width}px`, !markup.includes('<main'));
+    check(`${name} does not duplicate the main-content id at ${width}px`, !markup.includes('id="main-content"'));
     check(
       `${name} has no unclosed horizontal region at ${width}px`,
       !/width:\s*9\d\dpx/.test(markup) || width >= 768,

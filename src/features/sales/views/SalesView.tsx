@@ -36,6 +36,51 @@ import { OrdersTable } from '../components/OrdersTable';
 import { SalesDateRangePicker, resolvePresetRange } from '../components/SalesDateRangePicker';
 import { useProductMutations } from '../../inventory/hooks/useProductMutations';
 
+/**
+ * Confirmation copy for a revenue-reversing status change.
+ *
+ * A refund and a cancellation look identical to the status enum but are not the
+ * same event: a refund means the money has already left and a ledger entry is
+ * owed, while a cancellation abandons a fulfilment — only reachable from
+ * `pending` or `processing`, before dispatch. Telling a merchant "money is
+ * returned to you" for a pre-dispatch cancellation would be wrong, and telling
+ * someone cancelling a shipped order that nothing happens would be worse. The
+ * two branches previously carried byte-identical copy, so the choice on screen
+ * was cosmetic.
+ */
+export const describeReversal = (nextStatus: OrderStatus, order: Order): ReactNode => {
+  const units = order.items.reduce((total, item) => total + Math.max(0, item.quantity), 0);
+
+  if (nextStatus === 'refunded') {
+    return (
+      <>
+        <Typography.Paragraph style={{ marginBottom: 8 }}>
+          {`${formatCurrency(order.totalAmount)} will be refunded to ${
+            order.customer.name
+          }, and ${formatNumber(units)} returned ${units === 1 ? 'unit goes' : 'units go'} back into stock.`}
+        </Typography.Paragraph>
+        <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+          Refunds are only available once an order has shipped. The order stops counting
+          toward revenue, profit and average order value.
+        </Typography.Paragraph>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <Typography.Paragraph style={{ marginBottom: 8 }}>
+        {`${formatNumber(units)} returned ${units === 1 ? 'unit goes' : 'units go'} back into stock and the order leaves the fulfilment queue.`}
+      </Typography.Paragraph>
+      <Typography.Paragraph type="secondary" style={{ marginBottom: 0 }}>
+        {order.status === 'pending'
+          ? 'Nothing has shipped and no capture has settled, so no refund is issued. The order stops counting toward revenue.'
+          : 'This order is already picked and packed, so the items must be put back on the shelf rather than picked up where they left off. The order stops counting toward revenue.'}
+      </Typography.Paragraph>
+    </>
+  );
+};
+
 /** Statuses offered in the tracker row, in fulfilment order. */
 export const TRACKED_ORDER_STATUSES: readonly OrderStatus[] = [
   'pending',
@@ -343,9 +388,7 @@ export const SalesView: FC = () => {
     }
     modal.confirm({
       title: `${nextStatus === 'refunded' ? 'Refund' : 'Cancel'} ${order.orderNumber}?`,
-      content: nextStatus === 'refunded'
-        ? 'Every line item is returned to stock and this order stops counting toward revenue.'
-        : 'Every line item is returned to stock and this order stops counting toward revenue.',
+      content: describeReversal(nextStatus, order),
       okText: nextStatus === 'refunded' ? 'Refund order' : 'Cancel order',
       okButtonProps: { danger: true },
       onOk: commit,
