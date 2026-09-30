@@ -12,7 +12,8 @@
  * under `renderToStaticMarkup`.
  */
 
-import { App as AntdApp, Button, Card, Col, Row, Typography } from 'antd';
+import { SearchOutlined } from '@ant-design/icons';
+import { App as AntdApp, Button, Card, Col, Input, Row, Typography } from 'antd';
 import { useEffect, useMemo, useState, type FC, type ReactNode } from 'react';
 
 import { colorTokens, fontTokens, layoutTokens } from '../../../app/theme/tokens';
@@ -193,6 +194,7 @@ export const SalesViewBody: FC<SalesViewBodyProps> = ({
         style={{
           display: 'flex',
           alignItems: 'center',
+          justifyContent: 'space-between',
           gap: layoutTokens.gridGutter,
           flexWrap: 'wrap',
         }}
@@ -201,6 +203,16 @@ export const SalesViewBody: FC<SalesViewBodyProps> = ({
           value={range}
           onChange={onRangeChange}
           {...(headerControls === undefined ? {} : { extra: headerControls })}
+        />
+
+        <Input
+          allowClear
+          value={filters.searchQuery}
+          onChange={(event) => onSearchQueryChange(event.target.value)}
+          placeholder="Search order number, customer or SKU"
+          aria-label="Search orders"
+          prefix={<SearchOutlined aria-hidden="true" />}
+          style={{ minWidth: compact ? '100%' : 280, maxWidth: compact ? '100%' : 360 }}
         />
       </div>
 
