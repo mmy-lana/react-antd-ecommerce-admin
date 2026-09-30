@@ -101,6 +101,21 @@ export const HeaderBarBody: FC<HeaderBarBodyProps> = ({
       <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
         {children}
 
+        {!isMobile && (
+          <Typography.Text
+            style={{
+              color: colorTokens.textTertiary,
+              fontSize: fontTokens.fontSizeSmall,
+              fontVariantNumeric: 'tabular-nums',
+              whiteSpace: 'nowrap',
+              marginRight: 8,
+            }}
+            aria-label="Current UTC timestamp"
+          >
+            {formatUtcClock(new Date().toISOString())}
+          </Typography.Text>
+        )}
+
         {summary === null ? null : (
           <Tooltip title={`${summary.alerts} product${summary.alerts === 1 ? '' : 's'} at or below the safety line`}>
             <Badge

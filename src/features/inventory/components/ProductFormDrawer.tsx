@@ -26,7 +26,7 @@ import {
   Space,
   Typography,
 } from 'antd';
-import { useMemo, type FC } from 'react';
+import { useEffect, useMemo, type FC } from 'react';
 
 import { colorTokens, fontTokens, layoutTokens } from '../../../app/theme/tokens';
 import { useOverlayWidth } from '../../../shared/components/primitives/ResponsiveContainer';
@@ -166,6 +166,9 @@ export const validateProductForm = (values: ProductFormValues): string[] => {
     if (variant.costPrice < 0) problems.push(`Variant “${variant.name.trim()}” has a negative cost.`);
     if (variant.stockQuantity < 0) {
       problems.push(`Variant “${variant.name.trim()}” has negative stock.`);
+    }
+    if (variant.safetyStockThreshold < 0) {
+      problems.push(`Variant “${variant.name.trim()}” has a negative safety stock threshold.`);
     }
   }
 
@@ -563,6 +566,12 @@ export const ProductFormDrawer: FC<ProductFormDrawerProps> = ({
   const width = useOverlayWidth(PRODUCT_DRAWER_BASE_WIDTH);
   const [form] = Form.useForm<ProductFormValues>();
   const isEditing = product !== null;
+
+  useEffect(() => {
+    if (open) {
+      form.resetFields();
+    }
+  }, [open, product, form]);
 
   return (
     <Drawer
