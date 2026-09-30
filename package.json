@@ -8,7 +8,7 @@
     "build": "tsc && vite build",
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.scripts.json",
     "preview": "vite preview",
-    "verify:domain": "vite build --config scripts/vite.verify-domain.config.ts && node .verify-cache/verify-domain.mjs && node .verify-cache/verify-storage.mjs && node .verify-cache/verify-components.mjs"
+    "verify:domain": "vite build --config scripts/vite.verify-domain.config.ts && node .verify-cache/verify-domain.mjs && node .verify-cache/verify-storage.mjs && node .verify-cache/verify-components.mjs && node .verify-cache/verify-hooks.mjs"
   },
   "dependencies": {
     "@ant-design/icons": "latest",
