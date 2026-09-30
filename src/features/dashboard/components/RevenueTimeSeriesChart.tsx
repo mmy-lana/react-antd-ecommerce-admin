@@ -297,7 +297,9 @@ export const RevenueTimeSeriesChart: FC<RevenueTimeSeriesChartProps> = ({
     (sum, point) => sum + (series === 'ordersCount' ? point.ordersCount : point[series]),
     0,
   );
-  const visibleLabel = `${visible.length} of ${length} ${interval === 'day' ? 'days' : 'months'}`;
+  const visibleLabel = `${visible.length} of ${length} ${
+    interval === 'day' ? 'days' : interval === 'week' ? 'weeks' : 'months'
+  }`;
 
   const body = (() => {
     if (loading) return <ChartSkeleton title="Revenue trend" height={resolvedHeight} />;
@@ -320,7 +322,7 @@ export const RevenueTimeSeriesChart: FC<RevenueTimeSeriesChartProps> = ({
         style={{ width: '100%', minWidth: 0, height: resolvedHeight }}
         role="img"
         aria-label={`${REVENUE_SERIES_LABEL[series]} ${
-          interval === 'day' ? 'daily' : 'monthly'
+          interval === 'day' ? 'daily' : interval === 'week' ? 'weekly' : 'monthly'
         } chart showing ${visibleLabel}. Visible total ${formatSeriesValue(series, visibleTotal)}.`}
       >
         {chartRenderer ? chartRenderer(config) : <Area {...config} />}

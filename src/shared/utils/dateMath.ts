@@ -10,6 +10,7 @@
 import dayjs, { type Dayjs } from 'dayjs';
 import advancedFormat from 'dayjs/plugin/advancedFormat';
 import customParseFormat from 'dayjs/plugin/customParseFormat';
+import isoWeek from 'dayjs/plugin/isoWeek';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import utc from 'dayjs/plugin/utc';
 
@@ -19,6 +20,7 @@ dayjs.extend(utc);
 dayjs.extend(customParseFormat);
 dayjs.extend(advancedFormat);
 dayjs.extend(relativeTime);
+dayjs.extend(isoWeek);
 
 /** Tokens understood by every UTC key produced in this module. */
 export const UTC_DAY_KEY_FORMAT = 'YYYY-MM-DD' as const;
@@ -169,8 +171,16 @@ export const utcDayKey = (value: Date | Dayjs | string): string =>
 export const utcMonthKey = (value: Date | Dayjs | string): string =>
   toUtcDayjs(value).format(UTC_MONTH_KEY_FORMAT);
 
-export const bucketKeyFor = (value: Date | Dayjs | string, interval: AggregationInterval): string =>
-  interval === 'day' ? utcDayKey(value) : utcMonthKey(value);
+export const utcWeekKey = (value: Date | Dayjs | string): string => {
+  const date = toUtcDayjs(value);
+  return `${date.isoWeekYear()}-W${String(date.isoWeek()).padStart(2, '0')}`;
+};
+
+export const bucketKeyFor = (value: Date | Dayjs | string, interval: AggregationInterval): string => {
+  if (interval === 'month') return utcMonthKey(value);
+  if (interval === 'week') return utcWeekKey(value);
+  return utcDayKey(value);
+};
 
 /**
  * Produces a gap-free list of bucket keys so charts draw a continuous axis even
@@ -188,6 +198,15 @@ export const enumerateBucketKeys = (
     while (cursor.valueOf() <= limit) {
       keys.push(cursor.format(UTC_DAY_KEY_FORMAT));
       cursor = cursor.add(1, 'day');
+    }
+    return keys;
+  }
+
+  if (interval === 'week') {
+    let cursor = startOfUtcDay(range.startDate);
+    while (cursor.valueOf() <= limit) {
+      keys.push(`${cursor.isoWeekYear()}-W${String(cursor.isoWeek()).padStart(2, '0')}`);
+      cursor = cursor.add(7, 'day');
     }
     return keys;
   }
@@ -213,10 +232,16 @@ export const formatUtc = (
   template: string = UTC_DISPLAY_FORMATS.dateTime,
 ): string => toUtcDayjs(value).format(template);
 
-export const formatBucketKey = (key: string, interval: AggregationInterval): string =>
-  toUtcDayjs(key).format(
-    interval === 'day' ? UTC_DISPLAY_FORMATS.dayShort : UTC_DISPLAY_FORMATS.monthShort,
-  );
+export const formatBucketKey = (key: string, interval: AggregationInterval): string => {
+  if (interval === 'week') {
+    const weekNumber = key.split('-W')[1] ?? key;
+    return `W${weekNumber}`;
+  }
+  if (interval === 'month') {
+    return toUtcDayjs(`${key.slice(0, 7)}-01`).format(UTC_DISPLAY_FORMATS.monthShort);
+  }
+  return toUtcDayjs(key).format(UTC_DISPLAY_FORMATS.dayShort);
+};
 
 /** Human label for an active filter, e.g. `Jul 1 – Jul 30, 2026`. */
 export const describeDateRange = (range: DateRangeFilter): string => {

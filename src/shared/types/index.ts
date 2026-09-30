@@ -47,7 +47,7 @@ export const INVENTORY_CHANGE_TYPES = [
 ] as const;
 export type InventoryChangeType = (typeof INVENTORY_CHANGE_TYPES)[number];
 
-export const AGGREGATION_INTERVALS = ['day', 'month'] as const;
+export const AGGREGATION_INTERVALS = ['day', 'week', 'month'] as const;
 export type AggregationInterval = (typeof AGGREGATION_INTERVALS)[number];
 
 /** Discriminators accepted by filter state; `'all'` disables that facet. */

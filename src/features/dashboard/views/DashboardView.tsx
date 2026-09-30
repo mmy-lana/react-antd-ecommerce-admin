@@ -304,7 +304,7 @@ export const DashboardViewBody: FC<DashboardViewBodyProps> = ({
                 />
                 <RevenueTimeSeriesChart
                   data={series}
-                  interval={interval === 'week' ? 'day' : interval}
+                  interval={interval}
                   loading={loading}
                   {...(chartRenderer === undefined ? {} : { chartRenderer: chartRenderer.area })}
                   emptyState={
