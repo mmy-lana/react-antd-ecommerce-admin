@@ -16,6 +16,7 @@ export default defineConfig({
       input: {
         'verify-domain': 'scripts/verify-domain.ts',
         'verify-storage': 'scripts/verify-storage.ts',
+        'verify-components': 'scripts/verify-components.tsx',
       },
       output: {
         entryFileNames: '[name].mjs',
